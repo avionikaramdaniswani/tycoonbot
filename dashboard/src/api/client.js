@@ -42,5 +42,6 @@ export const botApi = {
 
 export const tycoonApi = {
   overview: () => api.get('/tycoon/overview').then((r) => r.data),
-  player: (jid) => api.get(`/tycoon/players/${encodeURIComponent(jid)}`).then((r) => r.data)
+  player: (jid) => api.get(`/tycoon/players/${encodeURIComponent(jid)}`).then((r) => r.data),
+  reset: () => api.post('/tycoon/reset', { confirm: 'RESET' }).then((r) => r.data)
 }

@@ -39,6 +39,11 @@ function fileBackend() {
     },
     async all() {
       return Object.values(readAll())
+    },
+    async reset() {
+      const n = Object.keys(readAll()).length
+      writeAll({})
+      return n
     }
   }
 }
@@ -59,6 +64,10 @@ function mongoBackend() {
     },
     async all() {
       return col.find({}).toArray()
+    },
+    async reset() {
+      const r = await col.deleteMany({})
+      return r.deletedCount || 0
     }
   }
 }
@@ -93,4 +102,9 @@ export async function topPlayers(limit = 10) {
 
 export async function allPlayers() {
   return getBackend().all()
+}
+
+// Hapus SEMUA data pemain Tycoon (tidak bisa dibatalkan). Kembalikan jumlah terhapus.
+export async function resetAllPlayers() {
+  return getBackend().reset()
 }

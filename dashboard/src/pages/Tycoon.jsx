@@ -3,6 +3,7 @@ import { tycoonApi } from '../api/client.js'
 import { fmt, fmtShort } from '../lib/format.js'
 import StatTiles from '../components/tycoon/StatTiles.jsx'
 import PlayerDetail from '../components/tycoon/PlayerDetail.jsx'
+import ResetDialog from '../components/tycoon/ResetDialog.jsx'
 import Bar, { approvalColor } from '../components/tycoon/Bar.jsx'
 
 export default function Tycoon() {
@@ -10,6 +11,7 @@ export default function Tycoon() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState(null)
+  const [showReset, setShowReset] = useState(false)
 
   const load = useCallback(() => {
     setLoading(true)
@@ -25,19 +27,35 @@ export default function Tycoon() {
     load()
   }, [load])
 
+  async function handleReset() {
+    await tycoonApi.reset()
+    setShowReset(false)
+    setSelected(null)
+    load()
+  }
+
   const maxTier = data ? Math.max(1, ...data.tierDist.map((t) => t.count)) : 1
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <p className="text-sm text-slate-400">Data pemain game City Tycoon (read-only).</p>
-        <button
-          onClick={load}
-          disabled={loading}
-          className="text-sm px-3 py-1.5 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 disabled:opacity-50"
-        >
-          {loading ? 'Memuat…' : 'Refresh'}
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={load}
+            disabled={loading}
+            className="text-sm px-3 py-1.5 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+          >
+            {loading ? 'Memuat…' : 'Refresh'}
+          </button>
+          <button
+            onClick={() => setShowReset(true)}
+            disabled={!data}
+            className="text-sm px-3 py-1.5 rounded-lg border border-rose-800 text-rose-300 hover:bg-rose-950/50 disabled:opacity-50"
+          >
+            Reset semua
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -131,6 +149,14 @@ export default function Tycoon() {
       )}
 
       {selected && <PlayerDetail jid={selected} onClose={() => setSelected(null)} />}
+
+      {showReset && (
+        <ResetDialog
+          totalPlayers={data?.totalPlayers || 0}
+          onCancel={() => setShowReset(false)}
+          onConfirm={handleReset}
+        />
+      )}
     </div>
   )
 }
