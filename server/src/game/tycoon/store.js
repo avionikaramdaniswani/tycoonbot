@@ -36,6 +36,9 @@ function fileBackend() {
       return Object.values(readAll())
         .sort((a, b) => netWorth(b) - netWorth(a))
         .slice(0, limit)
+    },
+    async all() {
+      return Object.values(readAll())
     }
   }
 }
@@ -53,6 +56,9 @@ function mongoBackend() {
     async top(limit) {
       const all = await col.find({}).toArray()
       return all.sort((a, b) => netWorth(b) - netWorth(a)).slice(0, limit)
+    },
+    async all() {
+      return col.find({}).toArray()
     }
   }
 }
@@ -83,4 +89,8 @@ export async function savePlayer(p) {
 
 export async function topPlayers(limit = 10) {
   return getBackend().top(limit)
+}
+
+export async function allPlayers() {
+  return getBackend().all()
 }

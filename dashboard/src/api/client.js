@@ -39,3 +39,8 @@ export const botApi = {
   logout: () => api.post('/bot/logout').then((r) => r.data),
   pairing: (number) => api.post('/bot/pairing', { number }).then((r) => r.data)
 }
+
+export const tycoonApi = {
+  overview: () => api.get('/tycoon/overview').then((r) => r.data),
+  player: (jid) => api.get(`/tycoon/players/${encodeURIComponent(jid)}`).then((r) => r.data)
+}

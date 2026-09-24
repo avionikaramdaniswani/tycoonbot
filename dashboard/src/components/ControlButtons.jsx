@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-export default function ControlButtons({ state, actions, onLogout }) {
+export default function ControlButtons({ state, actions }) {
   const [busy, setBusy] = useState(null)
   const running = ['connecting', 'qr', 'pairing', 'connected', 'reconnecting'].includes(
     state.status
@@ -58,13 +58,6 @@ export default function ControlButtons({ state, actions, onLogout }) {
           🚪 Logout WA
         </Btn>
       </div>
-
-      <button
-        onClick={onLogout}
-        className="mt-4 w-full text-sm text-slate-400 hover:text-slate-200 transition"
-      >
-        Keluar dari dashboard
-      </button>
     </div>
   )
 }
