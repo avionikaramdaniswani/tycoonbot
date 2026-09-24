@@ -1,0 +1,44 @@
+{
+  "name": "Bot Terbaru",
+  "description": "Bot WhatsApp (@vanzxy/baileys) dengan dashboard kontrol web",
+  "keywords": ["whatsapp", "baileys", "bot", "dashboard"],
+  "repository": "",
+  "env": {
+    "DASHBOARD_USER": {
+      "description": "Username untuk login dashboard",
+      "value": "admin"
+    },
+    "DASHBOARD_PASSWORD": {
+      "description": "Password untuk login dashboard (ganti!)",
+      "generator": "secret"
+    },
+    "JWT_SECRET": {
+      "description": "Secret untuk menandatangani token JWT",
+      "generator": "secret"
+    },
+    "BOT_NAME": {
+      "description": "Nama bot",
+      "value": "Bot Terbaru"
+    },
+    "BOT_PREFIX": {
+      "description": "Prefix command bot",
+      "value": "."
+    },
+    "OWNER_NUMBER": {
+      "description": "Nomor owner, format 628xxxxxxxxxx",
+      "required": false
+    },
+    "MONGODB_URI": {
+      "description": "Connection string MongoDB Atlas (wajib agar sesi bertahan saat dyno restart)",
+      "required": true
+    },
+    "MONGODB_DB": {
+      "description": "Nama database MongoDB",
+      "value": "piobot"
+    }
+  },
+  "buildpacks": [{ "url": "heroku/nodejs" }],
+  "formation": {
+    "web": { "quantity": 1, "size": "basic" }
+  }
+}

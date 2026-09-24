@@ -1,0 +1,2 @@
+# Folder ini menyimpan data runtime (settings.json, dsb).
+# File .json diabaikan git, folder tetap dipertahankan lewat .gitkeep.

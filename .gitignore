@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Environment
+.env
+**/.env
+
+# WhatsApp session credentials — JANGAN pernah di-commit / dishare
+server/sessions/
+sessions/
+
+# Logs
+logs/
+**/logs/
+*.log
+
+# Runtime data
+server/data/*.json
+!server/data/.gitkeep
+
+# Build output
+dashboard/dist/
+
+# Misc
+.DS_Store
+Thumbs.db
