@@ -182,7 +182,7 @@ export const DAILY = {
 export const QUESTS = [
   { id: 'panen', desc: 'Panen 3 kali', metric: 'collects', target: 3, reward: 300 },
   { id: 'bangun', desc: 'Bangun 2 bangunan', metric: 'builds', target: 2, reward: 400 },
-  { id: 'cuan', desc: 'Kumpulkan 2000 kas dari panen', metric: 'kasEarned', target: 2000, reward: 500 }
+  { id: 'cuan', desc: 'Kumpulkan 2000 APBN dari panen', metric: 'kasEarned', target: 2000, reward: 500 }
 ]
 
 // Pencapaian permanen (sekali klaim).
@@ -191,7 +191,7 @@ export const ACHIEVEMENTS = [
   { id: 'kota_besar', desc: 'Capai 5.000 populasi', test: (p) => p.population >= 5000, reward: 2000 },
   { id: 'metropolitan', desc: 'Capai 25.000 populasi', test: (p) => p.population >= 25000, reward: 8000 },
   { id: 'megapolitan', desc: 'Capai 100.000 populasi', test: (p) => p.population >= 100000, reward: 30000 },
-  { id: 'sultan', desc: 'Punya 100.000 kas', test: (p) => p.kas >= 100000, reward: 3000 },
+  { id: 'sultan', desc: 'Punya 100.000 APBN', test: (p) => p.kas >= 100000, reward: 3000 },
   { id: 'kontraktor', desc: 'Bangun 50 total bangunan', test: (p) => totalBuildings(p) >= 50, reward: 2000 },
   { id: 'arsitek', desc: 'Selesaikan 1 megaproyek', test: (p) => landmarksDone(p) >= 1, reward: 5000 },
   { id: 'legenda', desc: 'Jadikan kota berstatus Legendaris', test: (p) => isLegend(p), reward: 50000 }

@@ -256,7 +256,7 @@ export function build(p, jenis, qty = 1) {
   if (!tierUnlocked(p.tier, b.tier)) return { ok: false, msg: `${b.label} baru terbuka di tier lebih tinggi.` }
   const owned = p.buildings[jenis] || 0
   const cost = buildCost(jenis, owned, qty)
-  if (p.kas < cost) return { ok: false, msg: `Kas kurang. Butuh ${cost}, kamu punya ${p.kas}.` }
+  if (p.kas < cost) return { ok: false, msg: `APBN kurang. Butuh ${cost}, kamu punya ${p.kas}.` }
   p.kas -= cost
   p.buildings[jenis] = owned + qty
   applyGrowth(p)
@@ -275,7 +275,7 @@ export function upgradeBuilding(p, jenis) {
   if ((p.buildings[jenis] || 0) <= 0) return { ok: false, msg: `Kamu belum punya ${b.label}.` }
   const level = lvl(p, jenis)
   const cost = upgradeCost(jenis, level)
-  if (p.kas < cost) return { ok: false, msg: `Kas kurang. Upgrade butuh ${cost}, kamu punya ${p.kas}.` }
+  if (p.kas < cost) return { ok: false, msg: `APBN kurang. Upgrade butuh ${cost}, kamu punya ${p.kas}.` }
   p.kas -= cost
   p.levels = p.levels || {}
   p.levels[jenis] = level + 1
@@ -292,7 +292,7 @@ export function setTax(p, rate) {
 export function upgradeStorage(p) {
   const next = STORAGE[p.storageLevel + 1]
   if (!next) return { ok: false, msg: 'Gudang sudah level maksimum.' }
-  if (p.kas < next.cost) return { ok: false, msg: `Kas kurang. Butuh ${next.cost}.` }
+  if (p.kas < next.cost) return { ok: false, msg: `APBN kurang. Butuh ${next.cost}.` }
   p.kas -= next.cost
   p.storageLevel += 1
   return { ok: true, hours: next.hours, cost: next.cost }
@@ -312,7 +312,7 @@ export function fundLandmark(p, id, amount) {
   const remaining = lm.cost - st.funded
   let pay = amount === 'max' || amount == null ? Math.min(p.kas, remaining) : Math.min(Math.round(amount), remaining)
   if (pay <= 0) return { ok: false, msg: 'Nominal dana tidak valid.' }
-  if (p.kas < pay) return { ok: false, msg: `Kas kurang. Kamu punya ${p.kas}.` }
+  if (p.kas < pay) return { ok: false, msg: `APBN kurang. Kamu punya ${p.kas}.` }
   p.kas -= pay
   p.landmarks = p.landmarks || {}
   const funded = st.funded + pay

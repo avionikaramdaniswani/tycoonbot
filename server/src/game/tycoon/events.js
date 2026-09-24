@@ -71,7 +71,7 @@ export function maybeSpawnEvent(p, now = Date.now()) {
 export function repair(p) {
   if (!p.event || p.event.type !== 'crisis') return { ok: false, msg: 'Tidak ada krisis yang perlu dibereskan.' }
   const cost = p.event.repair
-  if (p.kas < cost) return { ok: false, msg: `Kas kurang. Perbaikan butuh ${cost}, kamu punya ${p.kas}.` }
+  if (p.kas < cost) return { ok: false, msg: `APBN kurang. Perbaikan butuh ${cost}, kamu punya ${p.kas}.` }
   p.kas -= cost
   const label = p.event.label
   p.event = null

@@ -55,6 +55,17 @@ export function questStatus(p, now = Date.now()) {
   }))
 }
 
+// Cek read-only: apakah check-in harian sudah bisa diklaim lagi.
+export function dailyAvailable(p, now = Date.now()) {
+  const sinceH = (now - (p.lastDaily || 0)) / HOUR
+  return !p.lastDaily || sinceH >= DAILY.cooldownH
+}
+
+// Cek read-only: ada misi yang selesai tapi belum diklaim?
+export function questsReady(p, now = Date.now()) {
+  return questStatus(p, now).some((q) => q.done && !q.claimed)
+}
+
 // Klaim semua misi yang siap. Kembalikan total & jumlah.
 export function claimQuests(p, now = Date.now()) {
   const t = ensureToday(p, now)
