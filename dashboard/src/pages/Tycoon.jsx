@@ -82,9 +82,12 @@ export default function Tycoon() {
           </div>
           {/* PLACEHOLDER_TABLE */}
           <div className="bg-slate-900/70 border border-slate-800 rounded-2xl overflow-hidden">
-            <h3 className="text-sm font-semibold text-slate-300 px-5 pt-5 pb-3">
+            <h3 className="text-sm font-semibold text-slate-300 px-5 pt-5 pb-1">
               Leaderboard ({fmt(data.totalPlayers)} kota)
             </h3>
+            <p className="px-5 pb-3 text-xs text-slate-500">
+              Income/j = per jam-game · 1 jam game ≈ {Number((data.realMinPerHour || 2).toFixed(1))} menit nyata
+            </p>
             {data.leaderboard.length ? (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">

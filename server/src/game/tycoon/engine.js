@@ -1,6 +1,15 @@
-import { ECONOMY, BUILDINGS, SERVICES, EDU_PER_CAPITA, STORAGE, TIERS, STARTER_BUILDINGS, LANDMARKS } from './config.js'
+import { ECONOMY, BUILDINGS, SERVICES, EDU_PER_CAPITA, STORAGE, TIERS, STARTER_BUILDINGS, LANDMARKS, TIME } from './config.js'
 
 const HOUR = 3600000
+
+// Kompresi waktu: 1 jam nyata = TIME.ECON_SCALE jam-game untuk income & populasi,
+// TIME.EVENT_SCALE jam-game untuk event. Check-in harian tetap pakai HOUR (jam nyata).
+function econHours(ms) {
+  return (ms / HOUR) * TIME.ECON_SCALE
+}
+function eventHours(ms) {
+  return (ms / HOUR) * TIME.EVENT_SCALE
+}
 
 function clamp(v, lo, hi) {
   return Math.min(hi, Math.max(lo, v))
@@ -201,13 +210,13 @@ export function storageHours(p) {
 }
 
 export function pendingIncome(p, now = Date.now()) {
-  const elapsedH = Math.min((now - p.lastCollect) / HOUR, storageHours(p))
+  const elapsedH = Math.min(econHours(now - p.lastCollect), storageHours(p))
   return Math.max(0, Math.floor(incomePerHour(p) * Math.max(0, elapsedH)))
 }
 // ---- Populasi (deterministik, bisa naik & turun menuju target) ----
 export function applyGrowth(p, now = Date.now()) {
   const cap = popCapacity(p)
-  const elapsedH = (now - p.lastTick) / HOUR
+  const elapsedH = econHours(now - p.lastTick)
   if (elapsedH > 0) {
     if (p.mood) {
       p.mood *= Math.pow(1 - ECONOMY.MOOD_DECAY, elapsedH)
@@ -369,4 +378,4 @@ export function evalTier(p) {
   return null
 }
 
-export { clamp, HOUR }
+export { clamp, HOUR, econHours, eventHours }

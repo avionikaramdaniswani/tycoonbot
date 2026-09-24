@@ -78,6 +78,8 @@ export async function route(msg, sub, rest) {
 
     case 'build': {
       const jenis = String(rest[0] || '').toLowerCase()
+      // Tanpa argumen: kirim bottom-sheet pilihan bangunan (ditangani command layer).
+      if (!jenis) return { menu: view.buildMenu(p) }
       const qty = Math.max(1, parseInt(rest[1], 10) || 1)
       if (!BUILDINGS[jenis]) return { text: `Jenis tidak dikenal. Pilihan: ${Object.keys(BUILDINGS).join(', ')}.` }
       const r = engine.build(p, jenis, qty)
@@ -119,7 +121,7 @@ export async function route(msg, sub, rest) {
       const r = engine.upgradeStorage(p)
       if (!r.ok) return { text: r.msg }
       await savePlayer(p)
-      return { text: `Gudang di-upgrade. Kapasitas simpan jadi ${r.hours} jam (-${view.fmt(r.cost)} kas).` }
+      return { text: `Gudang di-upgrade. Kapasitas simpan jadi ${r.hours} jam-game / ${view.realTime(r.hours)} nyata (-${view.fmt(r.cost)} kas).` }
     }
 
     case 'proyek': {

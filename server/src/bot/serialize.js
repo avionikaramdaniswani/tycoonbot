@@ -18,6 +18,27 @@ export function serializeMessage(sock, m) {
   else if (type === 'extendedTextMessage') text = m.message.extendedTextMessage?.text || ''
   else if (content?.caption) text = content.caption
 
+  // Balasan tombol/list interaktif (bottom-sheet single_select, quick reply, dll):
+  // ambil id yang dipilih supaya diperlakukan seperti teks perintah biasa.
+  if (!text) {
+    if (type === 'listResponseMessage') {
+      text = content?.singleSelectReply?.selectedRowId || ''
+    } else if (type === 'interactiveResponseMessage') {
+      const raw = content?.nativeFlowResponseMessage?.paramsJson
+      if (raw) {
+        try {
+          text = JSON.parse(raw)?.id || ''
+        } catch {
+          text = ''
+        }
+      }
+    } else if (type === 'buttonsResponseMessage') {
+      text = content?.selectedButtonId || ''
+    } else if (type === 'templateButtonReplyMessage') {
+      text = content?.selectedId || ''
+    }
+  }
+
   return {
     raw: m,
     key: m.key,

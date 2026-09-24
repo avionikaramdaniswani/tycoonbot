@@ -1,8 +1,22 @@
 // Konstanta ekonomi, katalog bangunan, landmark, event, dan retensi Tycoon Kota.
 // Semua tuning ada di sini — jangan sebar angka ke file lain.
 
+// Skala biaya kemajuan (bangun/upgrade/gudang/landmark + kas awal). Dinaikkan untuk
+// mengimbangi income yang kini mengalir jauh lebih cepat — lihat TIME. Income & reward
+// TIDAK ikut diskalakan; rebalance murni dari sisi biaya.
+export const COST_SCALE = 6
+
+// Kompresi waktu nyata -> waktu game.
+//  ECON_SCALE : income & populasi. 30 = 2 menit nyata per 1 jam game.
+//  EVENT_SCALE: event. 6 = 10 menit nyata per 1 jam game (lebih pelan dari ekonomi).
+//  Check-in harian sengaja tetap jam nyata (pakai HOUR di engine).
+export const TIME = {
+  ECON_SCALE: 30,
+  EVENT_SCALE: 6
+}
+
 export const ECONOMY = {
-  START_KAS: 500,
+  START_KAS: 500 * COST_SCALE,
   START_APPROVAL: 70,
   COST_GROWTH: 1.15, // tuas pacing utama (naikin unit makin mahal)
   POP_GROWTH: 0.05, // proporsi jarak ke target yang ditempuh tiap jam (naik/turun)
@@ -109,6 +123,13 @@ export const LANDMARKS = {
   pusat_riset: { label: 'Pusat Riset', cost: 600000, tier: 'metropolitan', bonus: { popMult: 0.1 }, desc: 'Tarik talenta, kapasitas warga +10%.' },
   bandara: { label: 'Bandara Internasional', cost: 900000, tier: 'metropolitan', bonus: { incomeMult: 0.15 }, desc: 'Gerbang dunia, income +15%.' }
 }
+
+// Terapkan COST_SCALE sekali di sini (sumber tunggal) supaya engine & dashboard konsisten.
+const scaleCost = (n) => Math.round(n * COST_SCALE)
+for (const b of Object.values(BUILDINGS)) b.baseCost = scaleCost(b.baseCost)
+for (const l of Object.values(LANDMARKS)) l.cost = scaleCost(l.cost)
+for (const s of STORAGE) s.cost = scaleCost(s.cost)
+
 // Event: peluang & jeda kemunculan.
 export const EVENTS_CFG = {
   cooldownH: 6, // jeda minimum antar event

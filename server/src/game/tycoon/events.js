@@ -1,7 +1,7 @@
 // Sistem event: krisis pasif (perlu .ty repair) + choice A/B (efek sekali jalan).
 // RNG hanya dipakai di sini; kurva populasi/income tetap deterministik.
 import { EVENTS_CFG, CRISES, CHOICES } from './config.js'
-import { HOUR, clamp } from './engine.js'
+import { eventHours, clamp } from './engine.js'
 
 function pick(arr) {
   return arr[Math.floor(Math.random() * arr.length)]
@@ -51,14 +51,14 @@ function spawnChoice(p, now) {
 export function maybeSpawnEvent(p, now = Date.now()) {
   // Ada event aktif: cek kedaluwarsa choice, jangan tumpuk.
   if (p.event) {
-    if (p.event.type === 'choice' && (now - p.event.at) / HOUR >= EVENTS_CFG.choiceExpiryH) {
+    if (p.event.type === 'choice' && eventHours(now - p.event.at) >= EVENTS_CFG.choiceExpiryH) {
       applyChoice(p, p.event.b) // default aman
       p.event = null
       p.lastEventAt = now
     }
     return null
   }
-  const sinceH = (now - (p.lastEventAt || 0)) / HOUR
+  const sinceH = eventHours(now - (p.lastEventAt || 0))
   if (sinceH < EVENTS_CFG.cooldownH) return null
   // Peluang kumulatif: makin lama sejak boleh muncul, makin besar.
   const eligibleH = sinceH - EVENTS_CFG.cooldownH

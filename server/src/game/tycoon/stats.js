@@ -7,6 +7,7 @@ import {
   LANDMARKS,
   EDU_PER_CAPITA,
   ECONOMY,
+  TIME,
   totalBuildings,
   landmarksDone,
   isLegend
@@ -67,7 +68,10 @@ export function overview(players) {
     totalNetWorth: rows.reduce((a, r) => a + r.netWorth, 0),
     legends: rows.filter((r) => r.legend).length,
     tierDist,
-    leaderboard: rows
+    leaderboard: rows,
+    // Waktu game dipercepat: 1 jam-game = realMinPerHour menit nyata (buat legenda UI).
+    econScale: TIME.ECON_SCALE,
+    realMinPerHour: 60 / TIME.ECON_SCALE
   }
 }
 
@@ -125,6 +129,8 @@ export function playerDetail(p) {
     popCapacity: cap,
     income,
     storageHours: storageHours(p),
+    econScale: TIME.ECON_SCALE,
+    realMinPerHour: 60 / TIME.ECON_SCALE,
     power,
     pollution: Math.round(pollution(p)),
     traffic,

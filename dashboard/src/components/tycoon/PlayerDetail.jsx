@@ -95,7 +95,7 @@ function Body({ d }) {
         </div>
       </Section>
 
-      <Section title="Income / jam">
+      <Section title="Income / jam-game">
         <div className="grid grid-cols-3 gap-2">
           <Field label="Kotor" value={fmt(d.income.gross)} />
           <Field label="Upkeep" value={`-${fmt(d.income.upkeep)}`} valueClass="text-rose-300" />
@@ -106,7 +106,9 @@ function Body({ d }) {
           />
         </div>
         <div className="text-[11px] text-slate-500 mt-1.5">
-          Gudang menampung income hingga {d.storageHours} jam.
+          Gudang menampung income hingga {d.storageHours} jam-game (~
+          {Math.round(d.storageHours * (d.realMinPerHour || 2))} menit nyata). 1 jam game ≈{' '}
+          {Number((d.realMinPerHour || 2).toFixed(1))} menit nyata.
         </div>
       </Section>
       <Section title="Infrastruktur">

@@ -1,4 +1,4 @@
-import { BUILDINGS, TIERS, SERVICES, LANDMARKS, isLegend } from './config.js'
+import { BUILDINGS, TIERS, SERVICES, LANDMARKS, isLegend, TIME } from './config.js'
 import {
   incomePerHour,
   incomeBreakdown,
@@ -18,9 +18,23 @@ import {
   missingReq
 } from './engine.js'
 import { questStatus, achStatus } from './progression.js'
+import appConfig from '../../config/index.js'
 
 const nf = new Intl.NumberFormat('id-ID')
 export const fmt = (n) => nf.format(Math.round(n || 0))
+
+// Waktu game dipercepat: 1 "jam" game = sekian menit nyata (lihat TIME.ECON_SCALE).
+export const REAL_MIN_PER_JAM = 60 / TIME.ECON_SCALE
+export const JAM_LEGEND = `1 jam game = ${Number(REAL_MIN_PER_JAM.toFixed(1))} menit nyata`
+
+// Ubah durasi dalam jam-game jadi perkiraan waktu nyata yang mudah dibaca.
+export function realTime(gameHours) {
+  const mins = gameHours * REAL_MIN_PER_JAM
+  if (mins < 60) return `${Math.round(mins)} menit`
+  const h = Math.floor(mins / 60)
+  const m = Math.round(mins % 60)
+  return m ? `${h} jam ${m} mnt` : `${h} jam`
+}
 
 function clamp(v, lo, hi) {
   return Math.min(hi, Math.max(lo, v))
@@ -102,7 +116,7 @@ export function dashboard(p) {
   if (tl) lines.push(tl)
   lines.push(
     `Income    : ${fmt(inc.net)}/jam (kotor ${fmt(inc.gross)} - upkeep ${fmt(inc.upkeep)})`,
-    `Siap panen: ${fmt(pending)} (cap ${storageHours(p)} jam)`
+    `Siap panen: ${fmt(pending)} (gudang penuh dlm ${realTime(storageHours(p))})`
   )
   if (nt) {
     const miss = missingReq(p, nt)
@@ -112,7 +126,7 @@ export function dashboard(p) {
   }
   const ev = eventBanner(p)
   if (ev) lines.push(ev)
-  lines.push('--------------------', 'Panen: .ty collect  |  Bantuan: .ty help')
+  lines.push('--------------------', JAM_LEGEND, 'Panen: .ty collect  |  Bantuan: .ty help')
   return lines.join('\n')
 }
 
@@ -143,8 +157,36 @@ export function shop(p) {
     const tag = locked ? ` [terkunci: ${tierLabel(b.tier)}]` : ''
     lines.push(`${k} (punya ${owned}${lvlTag}) - ${fmt(cost)} kas - ${buildingEffect(b)}${tag}`)
   }
-  lines.push('--------------------', 'Bangun: .ty build <jenis> [jumlah]  |  Upgrade: .ty upgrade <jenis>')
+  lines.push('--------------------', JAM_LEGEND, 'Bangun: .ty build <jenis> [jumlah]  |  Upgrade: .ty upgrade <jenis>')
   return lines.join('\n')
+}
+
+// Data untuk bottom-sheet (single_select) pilihan bangunan saat `.ty build` tanpa argumen.
+// Hanya bangunan yang sudah terbuka (sesuai tier) yang ditampilkan; setiap baris membawa
+// id perintah lengkap (mis. ".ty build warung") supaya ketukan langsung memicu build.
+export function buildMenu(p) {
+  const prefix = appConfig.bot.prefix
+  const rows = []
+  for (const [k, b] of Object.entries(BUILDINGS)) {
+    if (tierIndex(b.tier) > tierIndex(p.tier)) continue // sembunyikan yang masih terkunci
+    const owned = p.buildings[k] || 0
+    const cost = buildCost(k, owned, 1)
+    const eff = []
+    if (b.income) eff.push(`+${b.income}/jam-game`)
+    if (b.popCap) eff.push(`+${fmt(b.popCap)} warga`)
+    const suffix = eff.length ? ` · ${eff.join(', ')}` : ''
+    rows.push({
+      title: `${b.label} — ${fmt(cost)} kas`,
+      description: `punya ${owned}${suffix}`,
+      id: `${prefix}ty build ${k}`
+    })
+  }
+  return {
+    text: `Mau bangun apa di ${p.name}?\nKas tersedia: ${fmt(p.kas)}.`,
+    footer: JAM_LEGEND,
+    button: 'Pilih bangunan',
+    sections: [{ title: 'Bangunan tersedia', rows }]
+  }
 }
 
 // Daftar megaproyek + progres pendanaan.
