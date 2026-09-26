@@ -16,24 +16,29 @@ export async function renderBoardHtml(game) {
   const html = `
     <html>
       <head>
+        <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
         <style>
-          body {
-            width: 100vw;
-            height: 100vh;
+          html, body {
             margin: 0;
+            padding: 0;
+            background: linear-gradient(135deg, #1a1c29 0%, #2a2d42 100%);
+            color: white;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            -webkit-tap-highlight-color: transparent;
+          }
+          body {
+            min-height: 100vh;
             display: flex;
             justify-content: center;
             align-items: center;
-            background: linear-gradient(135deg, #1a1c29 0%, #2a2d42 100%);
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            overflow: hidden;
+            padding: 15px;
             box-sizing: border-box;
           }
           .board-container {
-            width: 90vmin;
-            height: 90vmin;
+            width: min(100%, 400px);
+            aspect-ratio: 1;
             background: rgba(255, 255, 255, 0.05);
-            padding: 4vmin;
+            padding: 15px;
             border-radius: 20px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.5), inset 0 2px 5px rgba(255,255,255,0.1);
             border: 1px solid rgba(255,255,255,0.1);
@@ -43,28 +48,27 @@ export async function renderBoardHtml(game) {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
             grid-template-rows: repeat(3, 1fr);
-            gap: 2vmin;
+            gap: 10px;
             width: 100%;
             height: 100%;
           }
           .cell {
             background: #1f2233;
-            border-radius: 15px;
+            border-radius: 12px;
             display: flex;
             justify-content: center;
             align-items: center;
-            font-size: 15vmin;
+            font-size: clamp(30px, 12vw, 60px);
             font-weight: bold;
             box-shadow: inset 0 4px 5px rgba(0,0,0,0.4), 0 2px 0 rgba(255,255,255,0.05);
             text-shadow: 0 2px 4px rgba(0,0,0,0.5);
             cursor: pointer;
             user-select: none;
-            -webkit-tap-highlight-color: transparent;
           }
           .cell.x { color: #f7768e; }
           .cell.o { color: #7aa2f7; }
           .number {
-            font-size: 8vmin;
+            font-size: clamp(16px, 6vw, 30px);
             color: rgba(255,255,255,0.1);
             text-shadow: none;
           }
