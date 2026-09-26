@@ -14,8 +14,10 @@ export async function renderBoardHtml(game) {
   }
 
   const html = `
-    <html>
+    <!DOCTYPE html>
+    <html lang="id">
       <head>
+        <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
         <style>
           html, body {
@@ -96,103 +98,99 @@ export async function renderBoardHtml(game) {
           </div>
         </div>
 
-        <!-- Logika Game Mandiri (Berjalan Langsung di WA) -->
         <script>
-          let board = ${JSON.stringify(game.board)};
-          let turn = '${game.turn}';
-          let isAi = ${game.isAi};
-          let winner = null;
+          document.addEventListener('DOMContentLoaded', function() {
+            let board = ${JSON.stringify(game.board)};
+            let turn = '${game.turn}';
+            let isAi = ${game.isAi};
+            let winner = null;
 
-          function checkWinner(b) {
-            const lines = [
-              [0,1,2],[3,4,5],[6,7,8],
-              [0,3,6],[1,4,7],[2,5,8],
-              [0,4,8],[2,4,6]
-            ];
-            for (let line of lines) {
-              const [x,y,z] = line;
-              if (b[x] && b[x] === b[y] && b[x] === b[z]) return line;
+            function checkWinner(b) {
+              const lines = [
+                [0,1,2],[3,4,5],[6,7,8],
+                [0,3,6],[1,4,7],[2,5,8],
+                [0,4,8],[2,4,6]
+              ];
+              for (let line of lines) {
+                const [x,y,z] = line;
+                if (b[x] && b[x] === b[y] && b[x] === b[z]) return line;
+              }
+              return null;
             }
-            return null;
-          }
 
-          function getBestMove(b) {
-            const empty = b.map((v, i) => v === '' ? i : -1).filter(v => v !== -1);
-            if (empty.length === 0) return -1;
-            // Simple random AI for now
-            return empty[Math.floor(Math.random() * empty.length)];
-          }
+            function getBestMove(b) {
+              const empty = b.map((v, i) => v === '' ? i : -1).filter(v => v !== -1);
+              if (empty.length === 0) return -1;
+              return empty[Math.floor(Math.random() * empty.length)];
+            }
 
-          function render() {
-            const boardEl = document.getElementById('board');
-            let html = '';
-            let winLine = checkWinner(board);
-            
-            board.forEach((mark, i) => {
-              let cellClass = mark === 'X' ? 'x' : (mark === 'O' ? 'o' : '');
-              if (winLine && winLine.includes(i)) cellClass += ' win';
+            function render() {
+              const boardEl = document.getElementById('board');
+              let html = '';
+              let winLine = checkWinner(board);
               
-              let content = mark ? mark : '<span class="number">' + (i + 1) + '</span>';
-              html += '<div class="cell ' + cellClass + '" data-index="' + i + '">' + content + '</div>';
-            });
-            boardEl.innerHTML = html;
-            attachListeners(); // Pasang ulang event listener setelah render
-          }
-
-          function attachListeners() {
-            document.querySelectorAll('.cell').forEach(cell => {
-              cell.addEventListener('click', function() {
-                makeMove(parseInt(this.getAttribute('data-index')));
+              board.forEach((mark, i) => {
+                let cellClass = mark === 'X' ? 'x' : (mark === 'O' ? 'o' : '');
+                if (winLine && winLine.includes(i)) cellClass += ' win';
+                
+                let content = mark ? mark : '<span class="number">' + (i + 1) + '</span>';
+                html += '<div class="cell ' + cellClass + '" data-index="' + i + '">' + content + '</div>';
               });
-            });
-          }
-
-          function makeMove(pos) {
-            if (winner || board[pos] !== '') return;
-            
-            // Player move
-            board[pos] = turn;
-            let winLine = checkWinner(board);
-            
-            if (winLine) {
-              winner = turn;
-            } else if (!board.includes('')) {
-              winner = 'SERI';
-            } else {
-              turn = turn === 'X' ? 'O' : 'X';
+              boardEl.innerHTML = html;
               
-              // AI Move
-              if (isAi && turn === 'O') {
-                let aiMove = getBestMove(board);
-                if (aiMove !== -1) {
-                  board[aiMove] = 'O';
-                  winLine = checkWinner(board);
-                  if (winLine) {
-                    winner = 'O';
-                  } else if (!board.includes('')) {
-                    winner = 'SERI';
+              const statusEl = document.getElementById('status');
+              if (winner) {
+                if (winner === 'SERI') {
+                  statusEl.innerText = 'Gamenya SERI! 🤝';
+                } else {
+                  statusEl.innerText = 'Pemenangnya: ' + winner + ' 🎉';
+                }
+              } else {
+                statusEl.innerText = 'Giliran: ' + turn;
+              }
+            }
+
+            // Gunakan event delegation di container board agar lebih kebal CSP/re-render
+            document.getElementById('board').addEventListener('click', function(e) {
+              const cell = e.target.closest('.cell');
+              if (!cell) return;
+              
+              const pos = parseInt(cell.getAttribute('data-index'));
+              if (isNaN(pos) || winner || board[pos] !== '') return;
+              
+              // Player move
+              board[pos] = turn;
+              let winLine = checkWinner(board);
+              
+              if (winLine) {
+                winner = turn;
+              } else if (!board.includes('')) {
+                winner = 'SERI';
+              } else {
+                turn = turn === 'X' ? 'O' : 'X';
+                
+                // AI Move
+                if (isAi && turn === 'O') {
+                  let aiMove = getBestMove(board);
+                  if (aiMove !== -1) {
+                    board[aiMove] = 'O';
+                    winLine = checkWinner(board);
+                    if (winLine) {
+                      winner = 'O';
+                    } else if (!board.includes('')) {
+                      winner = 'SERI';
+                    }
+                    turn = 'X';
                   }
-                  turn = 'X';
                 }
               }
-            }
+              
+              render();
+            });
             
+            // Render pertama kali (optional, untuk sync)
             render();
-            
-            const statusEl = document.getElementById('status');
-            if (winner) {
-              if (winner === 'SERI') {
-                statusEl.innerText = 'Gamenya SERI! 🤝';
-              } else {
-                statusEl.innerText = 'Pemenangnya adalah: ' + winner + ' 🎉';
-              }
-            } else {
-              statusEl.innerText = 'Giliran: ' + turn;
-            }
-          }
-          
-          // Inisialisasi event listener saat pertama kali dimuat
-          attachListeners();
+          });
         </script>
       </body>
     </html>
