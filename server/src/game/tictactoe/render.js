@@ -1,11 +1,10 @@
-import { getSharp } from '@vanzxy/baileys'
+import sharp from 'sharp'
 
 /**
  * Render Tic Tac Toe board ke image Buffer menggunakan SVG -> Sharp
  * Dijamin jalan di Pterodactyl karena pakai library bawaan (tanpa chrome/puppeteer).
  */
 export async function renderBoardToBuffer(game) {
-  const sharp = await getSharp()
 
   // Tema glassmorphism & premium UI
   const bgColors = ['#1a1b26', '#24283b']
