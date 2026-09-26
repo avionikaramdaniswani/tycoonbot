@@ -23,7 +23,9 @@ import {
   deleteChallenge
 } from '../../game/tictactoe/store.js'
 import { renderBoardHtml } from '../../game/tictactoe/render-html.js'
+import { renderBoardImage } from '../../game/tictactoe/render-image.js'
 import { bot } from '../../bot/BotManager.js'
+
 import config from '../../config/index.js'
 
 const PREFIX = config.bot.prefix
@@ -92,24 +94,34 @@ async function sendBoard(sock, jid, game, statusText, quoted) {
   const p1 = mention(game.players.X)
   const p2 = mention(game.players.O)
 
-  // Generate HTML game
-  const htmlGame = await renderBoardHtml(game)
+  // Render HTML dan Gambar
+  const rawHtml = await renderBoardHtml(game)
+  const imageBuffer = await renderBoardImage(game)
   
-  // Bungkus HTML menjadi Data URI agar bisa dibuka di dalam WhatsApp Webview
-  const dataUri = `data:text/html;charset=utf-8,${encodeURIComponent(htmlGame)}`
+  let text = `🎮 *TIC TAC TOE*\n\n❌ ${p1}  vs  ⭕ ${p2}\n\n${statusText}`
 
-  const btn = new Button(sock)
-    .setBody(`🎮 *TIC TAC TOE*\n\n❌ ${p1}  vs  ⭕ ${p2}\n\n${statusText}`)
+  const msg = new AIRich(sock)
 
-  // Tambahkan tombol Webview ajaib yang berisi HTML Murni!
-  btn.addOpenWebview('🕹️ Buka Game Board', dataUri)
+  // 1. Tambahkan Gambar (HTML yg sudah di-render)
+  msg.addInlineImage(imageBuffer, { text: "Tic Tac Toe Board" })
 
-  // Tambahkan 1 tombol biasa untuk nyerah
+  // 2. Teks Status
+  msg.addText(text, { header: "Status Game" })
+
+  // 3. (Opsional/Gaya TikTok) Tampilkan Payload Code
+  msg.addCode('html', rawHtml)
+
+  // 4. Tombol Langkah via Suggestion Chips
   if (!game.winner) {
-    btn.addReply('🏳️ Nyerah', `${PREFIX}ttt quit`)
+    game.board.forEach((mark, i) => {
+      if (!mark) {
+        msg.addSuggest(`${PREFIX}ttt ${i + 1}`)
+      }
+    })
+    msg.addSuggest(`${PREFIX}ttt quit`)
   }
 
-  await btn.send(jid, { quoted: quoted?.raw })
+  await msg.send(jid, { quoted: quoted?.raw })
 }
 
 async function sendRich(sock, jid, heading, text, quoted, suggests) {
