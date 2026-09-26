@@ -1,8 +1,5 @@
-import { createGame, AI_JID } from '../../game/tictactoe/engine.js'
+import { createGame } from '../../game/tictactoe/engine.js'
 import { renderBoardHtml } from '../../game/tictactoe/render-html.js'
-import { jidNormalizedUser } from '@vanzxy/baileys'
-import { registerRoom } from '../../web/gameSocket.js'
-import { getName } from '../../bot/nameCache.js'
 
 import config from '../../config/index.js'
 
@@ -17,55 +14,15 @@ function deriveWsUrl() {
   return wsBase.replace(/\/+$/, '') + '/ttt'
 }
 
-// Format nomor mentah jadi lebih rapi: 6285709557572 -> +62 857-0955-7572
-function formatNumber(raw) {
-  if (!raw) return 'Pemain'
-  // Hapus @s.whatsapp.net kalau ada
-  const num = raw.split('@')[0]
-  if (num.length < 5) return num
-  // Format: +{kode negara} {4 digit}-{4 digit}-{sisa}
-  if (num.startsWith('62') && num.length >= 10) {
-    return `+62 ${num.slice(2, 5)}-${num.slice(5, 9)}-${num.slice(9)}`
-  }
-  // Generic: +{kode} {sisa dikelompokkan per 4}
-  return '+' + num.replace(/(\d{2})(\d{4})(\d{4})(\d*)/, '$1 $2-$3-$4').replace(/-$/, '')
-}
-
-// Ambil daftar anggota grup buat lobby "Create Room" -> [{id, name}].
-// Nama diambil dari cache pushName (nama asli yang pernah kirim pesan);
-// kalau belum ada, fallback ke nomor yang diformat rapi. Bot & penantang dikeluarkan.
-async function getGroupMembers(sock, msg) {
-  if (!msg.isGroup) return []
-  try {
-    const meta = await sock.groupMetadata(msg.from)
-    const meJid = sock.user?.id ? jidNormalizedUser(sock.user.id) : ''
-    const senderJid = msg.sender ? jidNormalizedUser(msg.sender) : ''
-    const out = []
-    for (const p of meta?.participants || []) {
-      const id = jidNormalizedUser(p.id)
-      if (id === meJid || id === senderJid) continue
-      out.push({ id, name: getName(id) || formatNumber(id) })
-    }
-    return out
-  } catch {
-    return []
-  }
-}
-
 // ── Kirim papan interaktif (HTML Primitive / AIRich) ────────────────
-// Game berjalan penuh di sisi client di dalam bubble WA — semua state,
-// giliran, mode (vs AI / 2 Player), reset & minimax ada di dalam HTML.
+// Game jalan penuh di sisi client di dalam bubble WA. Matchmaking online
+// pakai KODE ROOM 4 digit (Create/Join) — server WS (/ttt) yang mencocokkan
+// 2 pemain. Vs AI (Easy/Medium/Hard) & pilihan mode ada di dalam papan.
 // Bot cuma perlu mengirim papannya sekali, nggak menyimpan state apa pun.
 
 async function sendBoard(sock, jid, game, quoted) {
   const wsUrl = deriveWsUrl()
-  // Room id ditanam di payload pesan; semua yang buka pesan ini share room.
-  const room = `ttt-${game.startedAt}-${Math.random().toString(36).slice(2, 8)}`
-  const members = await getGroupMembers(sock, quoted)
-  // Daftarkan room ke server WS: chatJid + members dipakai buat fitur
-  // "tantang" (bot nge-tag target di chat grup ini).
-  registerRoom(room, { chatJid: jid, members })
-  const rawHtml = await renderBoardHtml(game, { wsUrl, room, members })
+  const rawHtml = await renderBoardHtml(game, { wsUrl })
 
   await sock.relayMessage(
     jid,
@@ -83,7 +40,7 @@ async function sendBoard(sock, jid, game, quoted) {
               {
                 messageType: 2,
                 messageText:
-                  '🎮 *TIC TAC TOE*\n\nTap kotak buat main! Ganti mode (🤖 vs AI / 👥 2 Player) & reset ada di dalam papan.'
+                  '🎮 *TIC TAC TOE*\n\nPilih di papan: Create Room / Join Room (main realtime beda HP pakai kode) atau Vs AI (Easy/Medium/Hard).'
               }
             ],
             unifiedResponse: {
@@ -127,11 +84,9 @@ async function sendText(sock, jid, heading, text, quoted) {
 
 // ── Handlers ────────────────────────────────────────────────
 
-async function handleLaunch(sock, msg, startMode) {
-  // Mode awal ditentukan lewat "lawan": AI_JID -> vs AI, selain itu -> 2 Player.
-  // render-html mendeteksi isAi dari game.players, dan mode bisa diganti di HTML.
-  const opponent = startMode === 'ai' ? AI_JID : 'PLAYER_O'
-  const game = createGame('PLAYER_X', opponent, msg.from)
+async function handleLaunch(sock, msg) {
+  // Mode (Create/Join/Vs AI) dipilih langsung di dalam papan.
+  const game = createGame('PLAYER_X', 'PLAYER_O', msg.from)
   await sendBoard(sock, msg.from, game, msg)
 }
 
@@ -139,17 +94,15 @@ async function handleHelp(sock, msg) {
   const text = [
     '📖 CARA MAIN:',
     '',
-    `\`${PREFIX}ttt\` — buka papan (default vs AI 🤖)`,
-    `\`${PREFIX}ttt pvp\` — buka papan mode 2 Player 👥`,
+    `\`${PREFIX}ttt\` — buka papan Tic Tac Toe`,
     '',
-    'Semua dimainkan langsung di papan:',
-    '• Tap kotak untuk jalan.',
-    '• Tombol 🤖 vs AI / 👥 2 Player buat ganti mode.',
-    '• Tombol ♻️ New buat mulai ulang.',
+    'Di dalam papan ada 3 pilihan:',
+    '• *Create Room* — bikin room, dapat kode 4 digit, tunggu lawan.',
+    '• *Join Room* — masukin kode room temanmu buat gabung.',
+    '• *Vs AI* — lawan bot (Easy / Medium / Hard).',
     '',
-    'Mode 2 Player = gantian tap di layar yang sama (pass-and-play).',
-    'Mode vs AI = kamu lawan bot (unbeatable).',
-    'Mode Online = main real-time beda HP (butuh server publik / PUBLIC_URL).'
+    'Online = 2 HP/WA berbeda main realtime lewat kode room yang sama',
+    '(butuh server publik / PUBLIC_URL aktif).'
   ].join('\n')
 
   await sendText(sock, msg.from, '🎮 TIC TAC TOE — Bantuan', text, msg)
@@ -160,7 +113,7 @@ async function handleHelp(sock, msg) {
 export default {
   name: 'ttt',
   aliases: ['tictactoe'],
-  description: 'Game Tic Tac Toe interaktif (vs AI & 2 Player, main langsung di papan)',
+  description: 'Game Tic Tac Toe interaktif (online realtime pakai kode room & vs AI)',
   category: 'game',
   async execute({ sock, msg, args }) {
     const sub = (args[0] || '').toLowerCase()
@@ -169,8 +122,6 @@ export default {
       return handleHelp(sock, msg)
     }
 
-    // `.ttt pvp` / `.ttt 2p` mulai di mode 2 Player, selain itu default vs AI.
-    const startMode = sub === 'pvp' || sub === '2p' || sub === '2player' ? 'pvp' : 'ai'
-    return handleLaunch(sock, msg, startMode)
+    return handleLaunch(sock, msg)
   }
 }

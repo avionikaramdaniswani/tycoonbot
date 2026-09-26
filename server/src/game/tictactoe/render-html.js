@@ -1,19 +1,18 @@
 /**
  * Tic Tac Toe mini-app di dalam bubble WA.
- * Splash -> Menu -> (Create Room = Online realtime) / (Vs AI).
- * Online: native WebSocket ke server (/ttt) sebagai wasit. Layar sambung
- * menampilkan diagnostik nyata (url + state + error) biar ketahuan kalau
- * koneksi gagal — bukan cuma muter "Menyambungkan" tanpa info.
+ * Menu: Create Room / Join Room (online realtime pakai KODE ROOM) / Vs AI.
  *
- * opts.wsUrl  = endpoint wss://.../ttt ('' = online nonaktif)
- * opts.room   = id room yang ditanam di pesan (yang buka pesan sama = 1 room)
- * opts.members = [{id,name}] anggota grup (buat info lobby)
+ * Online: native WebSocket ke server (/ttt). Create -> dapat kode 4 digit &
+ * nunggu; Join -> masukin kode lawan. Server yang mencocokkan 2 pemain dan
+ * jadi wasit. Layar game nampilin diagnostik kalau koneksi bermasalah.
+ *
+ * Vs AI: minimax dengan 3 tingkat kesulitan (Easy = asal, Medium = reaktif,
+ * Hard = unbeatable).
+ *
+ * opts.wsUrl = endpoint wss://.../ttt ('' = online nonaktif)
  */
 export async function renderBoardHtml(game, opts = {}) {
-  const members = Array.isArray(opts.members) ? opts.members : []
-  const membersJson = JSON.stringify(members)
   const wsUrl = opts.wsUrl || ''
-  const room = opts.room || ''
 
   const html = `
     <!DOCTYPE html>
@@ -26,7 +25,7 @@ export async function renderBoardHtml(game, opts = {}) {
           :root{--bg:#f4ede0;--ink:#161310;--card:#fffdf6;--x:#df5338;--o:#2f8f86;--acc:#f7c331;}
           html,body{background:var(--bg);color:var(--ink);font-family:'Segoe UI',system-ui,-apple-system,Roboto,sans-serif;-webkit-tap-highlight-color:transparent;}
           body{padding:20px 15px;}
-          .app{width:100%;max-width:342px;margin:0 auto;position:relative;min-height:410px;}
+          .app{width:100%;max-width:342px;margin:0 auto;position:relative;min-height:430px;}
           .screen{display:none;}
           .screen.active{display:block;animation:pop .32s cubic-bezier(.2,.85,.3,1.3);}
           @keyframes pop{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:none;}}
@@ -39,6 +38,7 @@ export async function renderBoardHtml(game, opts = {}) {
           .ic{width:52px;height:52px;border-radius:12px;border:2.5px solid var(--ink);display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:900;flex-shrink:0;}
           .ic.a{background:var(--x);color:#fff;}
           .ic.b{background:var(--o);color:#fff;}
+          .ic.c{background:var(--acc);color:var(--ink);}
           .ch{font-size:17px;font-weight:800;}
           .cs{font-size:12px;color:#7c7161;margin-top:2px;line-height:1.3;}
           .arw{margin-left:auto;font-size:22px;font-weight:900;}
@@ -47,18 +47,15 @@ export async function renderBoardHtml(game, opts = {}) {
           .back:active{transform:translate(3px,3px);box-shadow:0 0 0 var(--ink);}
           .htitle{font-size:19px;font-weight:900;text-transform:uppercase;letter-spacing:-.01em;}
           .hsub{font-size:12px;color:#7c7161;margin-top:1px;}
-          .list{display:flex;flex-direction:column;gap:10px;max-height:340px;overflow:auto;}
-          .player{background:var(--card);border:2.5px solid var(--ink);border-radius:13px;box-shadow:4px 4px 0 var(--ink);padding:11px 13px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:transform .09s,box-shadow .09s;}
-          .player:active{transform:translate(3px,3px);box-shadow:1px 1px 0 var(--ink);}
-          .av{width:40px;height:40px;border-radius:10px;border:2.5px solid var(--ink);background:var(--acc);display:flex;align-items:center;justify-content:center;font-weight:900;font-size:16px;flex-shrink:0;}
-          .pn{flex:1;font-size:14px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-          .vs{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:var(--x);}
-          .note{background:var(--acc);border:2.5px solid var(--ink);border-radius:11px;box-shadow:4px 4px 0 var(--ink);font-size:12px;font-weight:600;padding:11px 12px;margin-bottom:14px;line-height:1.35;}
-          .empty{text-align:center;padding:34px 14px;font-size:13px;font-weight:600;color:#7c7161;line-height:1.5;}
           .status{display:inline-block;font-size:15px;font-weight:800;text-transform:uppercase;letter-spacing:.02em;background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:9px;margin-bottom:16px;}
           .diag{display:none;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;line-height:1.5;background:var(--card);border:2px dashed var(--ink);border-radius:10px;padding:10px 12px;margin-bottom:14px;word-break:break-all;}
           .diag.show{display:block;}
           .diag b{color:var(--x);}
+          .codebar{background:var(--acc);border:2.5px solid var(--ink);border-radius:13px;box-shadow:4px 4px 0 var(--ink);padding:12px 14px;margin-bottom:14px;text-align:center;}
+          .codebar.err{background:var(--x);color:#fff;}
+          .codebar .cl{font-size:10px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;}
+          .codebar .cv{font-size:34px;font-weight:900;letter-spacing:.16em;line-height:1.05;margin-top:2px;}
+          .codebar .ct{font-size:11px;font-weight:600;margin-top:3px;opacity:.85;}
           .board{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
           .cell{aspect-ratio:1/1;background:var(--card);border:2.5px solid var(--ink);border-radius:14px;box-shadow:4px 4px 0 var(--ink);display:flex;justify-content:center;align-items:center;font-size:48px;font-weight:900;line-height:1;cursor:pointer;user-select:none;transition:transform .07s,box-shadow .07s;}
           .cell:active{transform:translate(3px,3px);box-shadow:1px 1px 0 var(--ink);}
@@ -68,6 +65,15 @@ export async function renderBoardHtml(game, opts = {}) {
           .num{font-size:15px;font-weight:800;color:#d8cdb6;}
           .ctrl{width:100%;margin-top:18px;padding:14px;border-radius:12px;border:2.5px solid var(--ink);background:var(--acc);box-shadow:5px 5px 0 var(--ink);font-size:14px;font-weight:900;text-transform:uppercase;letter-spacing:.05em;font-family:inherit;cursor:pointer;color:var(--ink);}
           .ctrl:active{transform:translate(4px,4px);box-shadow:1px 1px 0 var(--ink);}
+          .code-slots{display:flex;gap:11px;justify-content:center;margin:6px 0 4px;}
+          .slot{width:56px;height:66px;border:2.5px solid var(--ink);border-radius:13px;background:var(--card);box-shadow:4px 4px 0 var(--ink);display:flex;align-items:center;justify-content:center;font-size:32px;font-weight:900;}
+          .slot.f{background:var(--acc);}
+          .jmsg{text-align:center;font-size:12px;font-weight:700;color:var(--x);min-height:16px;margin:14px 0 4px;}
+          .keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:11px;margin-top:6px;}
+          .key{padding:15px 0;border:2.5px solid var(--ink);border-radius:13px;background:var(--card);box-shadow:4px 4px 0 var(--ink);font-size:23px;font-weight:900;text-align:center;cursor:pointer;color:var(--ink);font-family:inherit;user-select:none;}
+          .key:active{transform:translate(3px,3px);box-shadow:1px 1px 0 var(--ink);}
+          .key.ok{background:var(--o);color:#fff;}
+          .key.del{background:var(--card);}
           .splash{text-align:center;padding:60px 0;}
           .logo{width:92px;height:92px;margin:0 auto;border-radius:20px;border:3px solid var(--ink);background:var(--card);box-shadow:6px 6px 0 var(--ink);display:flex;align-items:center;justify-content:center;font-size:38px;font-weight:900;}
           .logo b:first-child{color:var(--x);}
@@ -80,15 +86,6 @@ export async function renderBoardHtml(game, opts = {}) {
           .overlay{position:absolute;inset:-20px -15px;background:rgba(244,237,224,.94);display:none;align-items:center;justify-content:center;flex-direction:column;gap:16px;z-index:40;padding:20px;}
           .overlay.show{display:flex;}
           .otext{font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;}
-          .modal-card{background:var(--card);border:3px solid var(--ink);border-radius:18px;box-shadow:7px 7px 0 var(--ink);padding:26px 22px;text-align:center;max-width:290px;animation:pop .3s cubic-bezier(.2,.85,.3,1.4);}
-          .modal-badge{width:66px;height:66px;margin:0 auto 14px;border-radius:16px;border:3px solid var(--ink);background:var(--x);color:#fff;display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:900;}
-          .modal-t{font-size:23px;font-weight:900;text-transform:uppercase;letter-spacing:-.01em;}
-          .modal-s{font-size:14px;color:#5f574a;font-weight:600;margin-top:7px;line-height:1.4;}
-          .modal-btns{display:flex;gap:11px;margin-top:22px;}
-          .mbtn{flex:1;padding:13px;border-radius:11px;border:2.5px solid var(--ink);font-size:14px;font-weight:900;text-transform:uppercase;font-family:inherit;cursor:pointer;box-shadow:4px 4px 0 var(--ink);color:var(--ink);}
-          .mbtn:active{transform:translate(3px,3px);box-shadow:1px 1px 0 var(--ink);}
-          .mbtn.yes{background:var(--o);color:#fff;}
-          .mbtn.no{background:var(--card);}
         </style>
       </head>
       <body>
@@ -106,69 +103,94 @@ export async function renderBoardHtml(game, opts = {}) {
             <div class="h1">Tic<br>Tac Toe</div>
             <div class="lead">Pilih cara main kamu.</div>
             <div class="menu">
-              <div class="card" id="m-room">
-                <div class="ic a">VS</div>
-                <div><div class="ch">Create Room</div><div class="cs">Tantang teman di grup</div></div>
+              <div class="card" id="m-create">
+                <div class="ic a">+</div>
+                <div><div class="ch">Create Room</div><div class="cs">Bikin room, bagikan kodenya</div></div>
+                <div class="arw">›</div>
+              </div>
+              <div class="card" id="m-join">
+                <div class="ic b">#</div>
+                <div><div class="ch">Join Room</div><div class="cs">Masuk pakai kode room</div></div>
                 <div class="arw">›</div>
               </div>
               <div class="card" id="m-ai">
-                <div class="ic b">AI</div>
-                <div><div class="ch">Vs AI</div><div class="cs">Lawan bot unbeatable</div></div>
+                <div class="ic c">AI</div>
+                <div><div class="ch">Vs AI</div><div class="cs">Lawan bot (Easy/Medium/Hard)</div></div>
                 <div class="arw">›</div>
               </div>
             </div>
           </section>
-          <section class="screen" id="s-lobby">
+          <section class="screen" id="s-ai">
             <div class="head">
-              <button class="back" id="l-back">‹</button>
-              <div><div class="htitle">Create Room</div><div class="hsub">Pilih lawanmu</div></div>
+              <button class="back" id="a-back">‹</button>
+              <div><div class="htitle">Vs AI</div><div class="hsub">Pilih tingkat kesulitan</div></div>
             </div>
-            <div id="l-note"></div>
-            <div class="list" id="p-list"></div>
+            <div class="menu">
+              <div class="card" data-diff="easy">
+                <div class="ic b">E</div>
+                <div><div class="ch">Easy</div><div class="cs">Santai — AI jalan asal</div></div>
+                <div class="arw">›</div>
+              </div>
+              <div class="card" data-diff="medium">
+                <div class="ic c">M</div>
+                <div><div class="ch">Medium</div><div class="cs">Nyerang & bertahan, masih bisa dikalahin</div></div>
+                <div class="arw">›</div>
+              </div>
+              <div class="card" data-diff="hard">
+                <div class="ic a">H</div>
+                <div><div class="ch">Hard</div><div class="cs">Unbeatable — mustahil menang</div></div>
+                <div class="arw">›</div>
+              </div>
+            </div>
+          </section>
+          <section class="screen" id="s-join">
+            <div class="head">
+              <button class="back" id="j-back">‹</button>
+              <div><div class="htitle">Join Room</div><div class="hsub">Masukin kode 4 digit</div></div>
+            </div>
+            <div class="code-slots" id="j-slots">
+              <div class="slot"></div><div class="slot"></div><div class="slot"></div><div class="slot"></div>
+            </div>
+            <div class="jmsg" id="j-msg"></div>
+            <div class="keypad" id="j-pad">
+              <div class="key" data-k="1">1</div><div class="key" data-k="2">2</div><div class="key" data-k="3">3</div>
+              <div class="key" data-k="4">4</div><div class="key" data-k="5">5</div><div class="key" data-k="6">6</div>
+              <div class="key" data-k="7">7</div><div class="key" data-k="8">8</div><div class="key" data-k="9">9</div>
+              <div class="key del" data-k="del">⌫</div><div class="key" data-k="0">0</div><div class="key ok" data-k="ok">✓</div>
+            </div>
           </section>
           <section class="screen" id="s-game">
             <div class="head">
               <button class="back" id="g-back">‹</button>
               <div><div class="htitle" id="g-label">Vs AI</div><div class="hsub" id="g-sub">Papan permainan</div></div>
             </div>
+            <div class="codebar" id="codebar" style="display:none;"></div>
             <div class="status" id="status">Giliran X</div>
             <div class="diag" id="diag"></div>
             <div class="board" id="board"></div>
             <button class="ctrl" id="btn-new">Main Lagi</button>
           </section>
           <div class="overlay" id="loading"><div class="dots"><i></i><i></i><i></i></div><div class="otext" id="loading-text">Memuat</div></div>
-          <div class="overlay" id="modal">
-            <div class="modal-card">
-              <div class="modal-badge">!</div>
-              <div class="modal-t" id="modal-t">Tantang</div>
-              <div class="modal-s" id="modal-s">Kamu ditantang</div>
-              <div class="modal-btns">
-                <button class="mbtn no" id="modal-no">Batal</button>
-                <button class="mbtn yes" id="modal-yes">Tantang</button>
-              </div>
-            </div>
-          </div>
         </div>
         <script>
           document.addEventListener('DOMContentLoaded', function() {
-            const MEMBERS = ${membersJson};
             const WS_URL = ${JSON.stringify(wsUrl)};
-            const ROOM = ${JSON.stringify(room)};
-            const ONLINE_OK = !!(WS_URL && ROOM);
+            const ONLINE_OK = !!WS_URL;
 
             let board = ['','','','','','','','',''];
             let turn = 'X';
             let mode = 'ai';
+            let difficulty = 'medium';
             let winner = null;
             let aiThinking = false;
             let gen = 0;
-            let oppName = '';
-            let pending = '';
-            let pendingTarget = '';
-            let pendingChallenge = '';
             let ws = null;
             let seat = null;
             let presence = { X: false, O: false };
+            let roomCode = '';
+            let joinCode = '';
+            let pendingAction = null;
+            let errMsg = '';
             let lastEvt = 'init';
             function swapTo(id) {
               const list = document.querySelectorAll('.screen');
@@ -182,22 +204,14 @@ export async function renderBoardHtml(game, opts = {}) {
             function hideLoading() { document.getElementById('loading').classList.remove('show'); }
             function goto(id, t, d) {
               showLoading(t);
-              setTimeout(function() { swapTo(id); hideLoading(); }, d || 780);
+              setTimeout(function() { swapTo(id); hideLoading(); }, d || 720);
             }
-            function showModal(m) {
-              pending = (m && m.name) || '';
-              pendingTarget = (m && m.id) || '';
-              document.getElementById('modal-t').innerText = 'Tantang?';
-              document.getElementById('modal-s').innerText =
-                'Tantang ' + pending + '? Dia bakal di-tag di chat biar dapat notif & tinggal buka papan yang sama.';
-              document.getElementById('modal').classList.add('show');
-            }
-            function hideModal() { document.getElementById('modal').classList.remove('show'); }
             function checkWinner(b) {
               const L = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
               for (let ln of L) { const x = ln[0], y = ln[1], z = ln[2]; if (b[x] && b[x] === b[y] && b[x] === b[z]) return ln; }
               return null;
             }
+            // Minimax penuh (AI = 'O', pemain = 'X') -> langkah optimal (Hard).
             function getBestMove(b) {
               function won(bd) {
                 const L = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
@@ -227,6 +241,29 @@ export async function renderBoardHtml(game, opts = {}) {
               }
               return bm;
             }
+            // Cari kotak kosong yang melengkapi garis milik 'p' (buat menang/blok).
+            function findLine(b, p) {
+              const L = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+              for (const ln of L) {
+                const v = [b[ln[0]], b[ln[1]], b[ln[2]]];
+                if (v.filter(function(c){return c===p;}).length === 2 && v.indexOf('') > -1) {
+                  return ln[v.indexOf('')];
+                }
+              }
+              return -1;
+            }
+            // Pilih langkah AI sesuai tingkat kesulitan.
+            function aiMove() {
+              const empty = [];
+              board.forEach(function(v, i) { if (v === '') empty.push(i); });
+              if (!empty.length) return -1;
+              if (difficulty === 'easy') return empty[Math.floor(Math.random() * empty.length)];
+              if (difficulty === 'hard') return getBestMove(board.slice());
+              // medium: ambil kemenangan instan -> blok kekalahan -> selebihnya asal.
+              let m = findLine(board, 'O'); if (m > -1) return m;
+              m = findLine(board, 'X'); if (m > -1) return m;
+              return empty[Math.floor(Math.random() * empty.length)];
+            }
             function stateName(w) {
               if (!w) return 'null';
               return ['CONNECTING','OPEN','CLOSING','CLOSED'][w.readyState];
@@ -234,35 +271,49 @@ export async function renderBoardHtml(game, opts = {}) {
             function updateDiag() {
               const d = document.getElementById('diag');
               if (mode !== 'online') { d.classList.remove('show'); return; }
-              const connected = ws && ws.readyState === 1 && seat;
-              if (connected && (presence.X && presence.O)) { d.classList.remove('show'); return; }
+              const ready = ws && ws.readyState === 1 && seat && presence.X && presence.O && !errMsg;
+              if (ready) { d.classList.remove('show'); return; }
               d.classList.add('show');
               let html = '';
               html += '<b>WS:</b> ' + (WS_URL || '(kosong — tunnel belum aktif)') + '<br>';
-              html += '<b>ROOM:</b> ' + (ROOM || '(kosong)') + '<br>';
               html += '<b>STATE:</b> ' + stateName(ws) + '<br>';
-              html += '<b>SEAT:</b> ' + (seat || '-') + ' | <b>EVT:</b> ' + lastEvt + '<br>';
+              html += '<b>SEAT:</b> ' + (seat || '-') + ' | <b>KODE:</b> ' + (roomCode || joinCode || '-') + '<br>';
+              html += '<b>EVT:</b> ' + lastEvt + '<br>';
               html += '<b>HADIR:</b> X=' + (presence.X ? 'ya' : '-') + ' O=' + (presence.O ? 'ya' : '-');
+              if (errMsg) html += '<br><b>ERR:</b> ' + errMsg;
               d.innerHTML = html;
+            }
+            function setCodebar() {
+              const c = document.getElementById('codebar');
+              if (mode !== 'online') { c.style.display = 'none'; return; }
+              if (errMsg) {
+                c.style.display = 'block';
+                c.className = 'codebar err';
+                c.innerHTML = '<div class="cl">Gagal</div><div class="ct" style="opacity:1;font-size:13px;margin-top:4px;">' + errMsg + '</div>';
+                return;
+              }
+              if (roomCode) {
+                const both = presence.X && presence.O;
+                c.style.display = 'block';
+                c.className = 'codebar';
+                c.innerHTML = '<div class="cl">Kode Room</div><div class="cv">' + roomCode + '</div>'
+                  + '<div class="ct">' + (both ? 'Lawan sudah gabung!' : 'Bagikan kode ini ke lawanmu') + '</div>';
+                return;
+              }
+              c.style.display = 'none';
             }
             function statusText() {
               if (mode === 'online') return onlineStatus();
               if (winner) {
                 if (winner === 'SERI') return 'Seri!';
-                if (mode === 'ai') return winner === 'O' ? 'AI Menang' : 'Kamu Menang';
-                return (winner === 'X' ? 'Kamu' : oppName) + ' Menang';
+                return winner === 'O' ? 'AI Menang' : 'Kamu Menang';
               }
-              if (mode === 'ai') return turn === 'X' ? 'Giliranmu' : 'AI Mikir';
-              return turn === 'X' ? 'Giliran Kamu' : 'Giliran ' + oppName;
+              return turn === 'X' ? 'Giliranmu' : 'AI Mikir';
             }
             function onlineStatus() {
               if (!ONLINE_OK) return 'Server Offline';
-              if (!ws || ws.readyState !== 1) return 'Menyambungkan';
-              if (!seat) return 'Menyambungkan';
-              if (seat === 'spec') {
-                if (winner) return winner === 'SERI' ? 'Seri!' : 'Pemain ' + winner + ' Menang';
-                return 'Nonton - Giliran ' + turn;
-              }
+              if (errMsg) return 'Gagal';
+              if (!ws || ws.readyState !== 1 || !seat) return 'Menyambungkan';
               if (!presence.X || !presence.O) return 'Menunggu Lawan';
               if (winner) {
                 if (winner === 'SERI') return 'Seri!';
@@ -282,6 +333,7 @@ export async function renderBoardHtml(game, opts = {}) {
               });
               el.innerHTML = h;
               document.getElementById('status').innerText = statusText();
+              setCodebar();
               updateDiag();
             }
             function resetBoard() {
@@ -293,47 +345,67 @@ export async function renderBoardHtml(game, opts = {}) {
             function openMenu() {
               gen++; aiThinking = false;
               if (mode === 'online') closeWs();
-              goto('menu', 'Memuat', 600);
+              mode = 'ai'; errMsg = ''; roomCode = '';
+              goto('menu', 'Memuat', 520);
             }
-            function openLobby() { buildList(); goto('lobby', 'Membuka lobby', 720); }
-            function startAi() {
-              mode = 'ai'; resetBoard();
-              document.getElementById('g-label').innerText = 'Vs AI';
+            function openAi() { goto('ai', 'Memuat', 480); }
+            function openJoin() {
+              joinCode = ''; renderSlots();
+              document.getElementById('j-msg').innerText = '';
+              goto('join', 'Memuat', 480);
+            }
+            function startAi(diff) {
+              mode = 'ai'; difficulty = diff || 'medium'; errMsg = ''; roomCode = '';
+              resetBoard();
+              const lbl = { easy: 'Easy', medium: 'Medium', hard: 'Hard' }[difficulty] || 'Medium';
+              document.getElementById('g-label').innerText = 'Vs AI - ' + lbl;
               document.getElementById('g-sub').innerText = 'Kamu (X) vs Bot (O)';
-              goto('game', 'Menyiapkan papan', 720);
+              goto('game', 'Menyiapkan papan', 700);
             }
-            function startOnline(name, targetId) {
-              mode = 'online'; oppName = name || '';
-              pendingChallenge = targetId || '';
+            function resetOnlineState() {
               gen++; aiThinking = false;
               board = ['','','','','','','','',''];
-              turn = 'X'; winner = null; seat = null; presence = { X: false, O: false }; lastEvt = 'start';
+              turn = 'X'; winner = null; seat = null;
+              presence = { X: false, O: false }; errMsg = ''; roomCode = ''; lastEvt = 'start';
+            }
+            function startCreate() {
+              mode = 'online'; resetOnlineState();
+              pendingAction = { type: 'create' };
               document.getElementById('g-label').innerText = 'Online';
-              document.getElementById('g-sub').innerText = name ? ('vs ' + name) : 'Realtime multiplayer';
+              document.getElementById('g-sub').innerText = 'Kamu host (X)';
               render();
-              goto('game', name ? ('Menantang ' + name) : 'Menyambungkan', 900);
+              goto('game', 'Membuat room', 800);
               connectWs();
             }
-            let retryTimer = null;
-            let retryDelay = 1000; // mulai dari 1 detik
-            const MAX_RETRY_DELAY = 30000; // maksimal 30 detik
-
+            function startJoin() {
+              if (joinCode.length !== 4) {
+                document.getElementById('j-msg').innerText = 'Kode harus 4 digit';
+                return;
+              }
+              mode = 'online'; resetOnlineState();
+              pendingAction = { type: 'join', code: joinCode };
+              document.getElementById('g-label').innerText = 'Online';
+              document.getElementById('g-sub').innerText = 'Gabung room ' + joinCode + ' (O)';
+              render();
+              goto('game', 'Gabung room ' + joinCode, 800);
+              connectWs();
+            }
             function connectWs() {
               if (!ONLINE_OK) { lastEvt = 'no-url'; render(); return; }
               closeWs();
               const g = gen;
               try {
                 lastEvt = 'connecting';
-                ws = new WebSocket(WS_URL + '?room=' + encodeURIComponent(ROOM));
+                ws = new WebSocket(WS_URL);
               } catch (err) {
                 lastEvt = 'throw:' + (err && err.message ? err.message : err);
+                errMsg = 'Tidak bisa connect';
                 render();
-                scheduleReconnect(g);
                 return;
               }
               ws.onopen = function() {
                 lastEvt = 'open';
-                retryDelay = 1000; // reset delay saat berhasil konek
+                if (pendingAction) { wsSend(pendingAction); }
                 render();
               };
               ws.onmessage = function(ev) {
@@ -341,89 +413,43 @@ export async function renderBoardHtml(game, opts = {}) {
                 lastEvt = 'msg';
                 let msg;
                 try { msg = JSON.parse(ev.data); } catch (e) { return; }
-                if (msg.type === 'welcome') {
-                  seat = msg.seat;
-                  // Begitu tersambung & dapat kursi, minta server nge-tag lawan
-                  // yang kita pilih di chat grup (undangan cross-device).
-                  if (pendingChallenge) {
-                    wsSend({ type: 'challenge', targetId: pendingChallenge });
-                    pendingChallenge = '';
-                  }
-                }
-                else if (msg.type === 'state') {
+                if (msg.type === 'created') {
+                  seat = msg.seat; roomCode = msg.code; errMsg = ''; lastEvt = 'created:' + msg.code;
+                } else if (msg.type === 'joined') {
+                  seat = msg.seat; errMsg = ''; lastEvt = 'joined';
+                } else if (msg.type === 'state') {
                   const s = msg.state;
                   board = s.board.map(function(c) { return c || ''; });
                   turn = s.turn; winner = s.winner || null;
                   if (msg.presence) presence = msg.presence;
-                }
-                else if (msg.type === 'challenged') {
-                  oppName = msg.name || oppName;
-                  lastEvt = 'tag-terkirim';
-                  document.getElementById('g-sub').innerText = 'Undangan terkirim ke ' + (msg.name || 'lawan');
-                }
-                else if (msg.type === 'error') {
-                  lastEvt = 'err:' + (msg.message || '?');
+                } else if (msg.type === 'error') {
+                  errMsg = msg.message || 'Error'; lastEvt = 'err:' + errMsg;
                 }
                 render();
               };
-              ws.onerror = function() {
-                lastEvt = 'error';
-                if (mode === 'online' && g === gen) {
-                  render();
-                  scheduleReconnect(g);
-                }
-              };
-              ws.onclose = function(e) {
-                lastEvt = 'close:' + (e && e.code);
-                if (mode === 'online' && g === gen) {
-                  render();
-                  scheduleReconnect(g);
-                }
-              };
-            }
-
-            function scheduleReconnect(g) {
-              if (retryTimer) clearTimeout(retryTimer);
-              if (mode !== 'online' || g !== gen) return;
-              retryTimer = setTimeout(function() {
-                if (mode === 'online' && g === gen) {
-                  lastEvt = 'reconnecting';
-                  render();
-                  connectWs();
-                }
-              }, retryDelay);
-              // Exponential backoff: 1s -> 2s -> 4s -> 8s -> ... -> 30s max
-              retryDelay = Math.min(retryDelay * 2, MAX_RETRY_DELAY);
+              ws.onerror = function() { lastEvt = 'error'; if (mode === 'online' && g === gen) render(); };
+              ws.onclose = function(e) { lastEvt = 'close:' + (e && e.code); if (mode === 'online' && g === gen) render(); };
             }
             function closeWs() {
-              if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
               if (ws) { try { ws.onclose = null; ws.close(); } catch (e) {} ws = null; }
-              seat = null; presence = { X: false, O: false };
+              seat = null; presence = { X: false, O: false }; pendingAction = null;
             }
             function wsSend(obj) {
               if (ws && ws.readyState === 1) { try { ws.send(JSON.stringify(obj)); } catch (e) {} }
             }
-            function buildList() {
-              const note = document.getElementById('l-note');
-              note.innerHTML = ONLINE_OK
-                ? '<div class="note">Pilih lawan lalu Terima. Lawan cukup buka papan/pesan yang sama buat gabung realtime.</div>'
-                : '<div class="note">Server realtime belum aktif (WS kosong). Set tunnel dulu, cek diagnostik di layar game.</div>';
-              const list = document.getElementById('p-list');
-              if (!MEMBERS.length) {
-                list.innerHTML = '<div class="empty">Belum ada anggota grup yang bisa ditantang.<br>Buka papan ini di dalam grup.</div>';
-                return;
+            function renderSlots() {
+              const slots = document.querySelectorAll('#j-slots .slot');
+              for (let i = 0; i < slots.length; i++) {
+                const ch = joinCode[i] || '';
+                slots[i].innerText = ch;
+                if (ch) slots[i].classList.add('f'); else slots[i].classList.remove('f');
               }
-              list.innerHTML = '';
-              MEMBERS.forEach(function(m) {
-                const nm = (m.name || m.id || 'Pemain').toString();
-                const row = document.createElement('div');
-                row.className = 'player';
-                row.innerHTML = '<div class="av"></div><div class="pn"></div><div class="vs">Tantang</div>';
-                row.querySelector('.av').innerText = (nm.trim().charAt(0) || '?').toUpperCase();
-                row.querySelector('.pn').innerText = nm;
-                row.addEventListener('pointerdown', function(e) { e.preventDefault(); showModal(m); });
-                list.appendChild(row);
-              });
+            }
+            function keyTap(k) {
+              if (k === 'del') { joinCode = joinCode.slice(0, -1); document.getElementById('j-msg').innerText = ''; renderSlots(); return; }
+              if (k === 'ok') { startJoin(); return; }
+              if (joinCode.length >= 4) return;
+              if (/^[0-9]$/.test(k)) { joinCode += k; document.getElementById('j-msg').innerText = ''; renderSlots(); }
             }
             function boardTap(e) {
               const cell = e.target.closest('.cell');
@@ -433,46 +459,56 @@ export async function renderBoardHtml(game, opts = {}) {
               const pos = parseInt(cell.getAttribute('data-i'), 10);
               if (isNaN(pos)) return;
               if (mode === 'online') {
-                if (!ONLINE_OK || !seat || seat === 'spec') return;
+                if (!ONLINE_OK || !seat) return;
                 if (winner || turn !== seat || board[pos] !== '') return;
                 if (!presence.X || !presence.O) return;
                 wsSend({ type: 'move', pos: pos });
                 return;
               }
-              if (winner || board[pos] !== '') return;
-              board[pos] = turn;
-              if (checkWinner(board)) { winner = turn; render(); return; }
+              // Vs AI (pemain = X).
+              if (winner || board[pos] !== '' || turn !== 'X') return;
+              board[pos] = 'X';
+              if (checkWinner(board)) { winner = 'X'; render(); return; }
               if (!board.includes('')) { winner = 'SERI'; render(); return; }
-              if (mode === 'ai') {
-                turn = 'O'; render();
-                aiThinking = true;
-                const g = gen;
-                setTimeout(function() {
-                  if (g !== gen || winner) { aiThinking = false; return; }
-                  const mv = getBestMove(board.slice());
-                  if (mv >= 0) board[mv] = 'O';
-                  if (checkWinner(board)) winner = 'O';
-                  else if (!board.includes('')) winner = 'SERI';
-                  else turn = 'X';
-                  aiThinking = false; render();
-                }, 480 + Math.random() * 520);
-              } else {
-                turn = turn === 'X' ? 'O' : 'X'; render();
-              }
+              turn = 'O'; render();
+              aiThinking = true;
+              const g = gen;
+              setTimeout(function() {
+                if (g !== gen || winner) { aiThinking = false; return; }
+                const mv = aiMove();
+                if (mv >= 0) board[mv] = 'O';
+                if (checkWinner(board)) winner = 'O';
+                else if (!board.includes('')) winner = 'SERI';
+                else turn = 'X';
+                aiThinking = false; render();
+              }, 420 + Math.random() * 460);
             }
-            document.getElementById('m-room').addEventListener('pointerdown', function(e){ e.preventDefault(); openLobby(); });
-            document.getElementById('m-ai').addEventListener('pointerdown', function(e){ e.preventDefault(); startAi(); });
-            document.getElementById('l-back').addEventListener('pointerdown', function(e){ e.preventDefault(); openMenu(); });
+            document.getElementById('m-create').addEventListener('pointerdown', function(e){ e.preventDefault(); startCreate(); });
+            document.getElementById('m-join').addEventListener('pointerdown', function(e){ e.preventDefault(); openJoin(); });
+            document.getElementById('m-ai').addEventListener('pointerdown', function(e){ e.preventDefault(); openAi(); });
+            document.getElementById('a-back').addEventListener('pointerdown', function(e){ e.preventDefault(); openMenu(); });
+            document.getElementById('j-back').addEventListener('pointerdown', function(e){ e.preventDefault(); openMenu(); });
             document.getElementById('g-back').addEventListener('pointerdown', function(e){ e.preventDefault(); openMenu(); });
+            document.getElementById('s-ai').addEventListener('pointerdown', function(e){
+              const card = e.target.closest('[data-diff]');
+              if (!card) return;
+              e.preventDefault();
+              startAi(card.getAttribute('data-diff'));
+            });
+            document.getElementById('j-pad').addEventListener('pointerdown', function(e){
+              const key = e.target.closest('.key');
+              if (!key) return;
+              e.preventDefault();
+              keyTap(key.getAttribute('data-k'));
+            });
             document.getElementById('btn-new').addEventListener('pointerdown', function(e){
               e.preventDefault();
-              if (mode === 'online') { if (seat && seat !== 'spec') wsSend({ type: 'reset' }); }
+              if (mode === 'online') { if (seat) wsSend({ type: 'reset' }); }
               else resetBoard();
             });
             document.getElementById('board').addEventListener('pointerdown', boardTap);
-            document.getElementById('modal-no').addEventListener('pointerdown', function(e){ e.preventDefault(); hideModal(); });
-            document.getElementById('modal-yes').addEventListener('pointerdown', function(e){ e.preventDefault(); var n = pending; var t = pendingTarget; hideModal(); startOnline(n, t); });
 
+            renderSlots();
             render();
             setTimeout(function(){ swapTo('menu'); }, 2100);
           });

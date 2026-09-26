@@ -1,24 +1,29 @@
 import { WebSocketServer } from 'ws'
 import { logger } from '../lib/logger.js'
-import { bot } from '../bot/BotManager.js'
-import { getName } from '../bot/nameCache.js'
 
 /**
- * Server WebSocket "mentah" untuk Tic Tac Toe online (real-time multiplayer).
+ * Server WebSocket untuk Tic Tac Toe online realtime — matchmaking pakai
+ * KODE ROOM 4 digit (bukan lagi nempel di pesan / tag anggota grup).
  *
- * Ini yang dipakai oleh <script> di dalam HTML rich-response: tiap HP yang
- * membuka pesan papan yang sama akan connect ke room yang sama (room id
- * ditanam di HTML saat render), lalu server jadi wasit + relay langkah.
+ * Alur:
+ *   - "Create Room" : client kirim {type:'create'} -> server bikin kode 4 digit
+ *     unik, jadikan client seat X, balas {type:'created', code, seat:'X'}.
+ *     Client nunggu di papan sampai ada yang join.
+ *   - "Join Room"   : client kirim {type:'join', code} -> server cari room; kalau
+ *     ada & slot O kosong, jadikan seat O, balas {type:'joined', seat:'O'}.
+ *   - Dua HP dengan kode sama = 1 room = main realtime. Server jadi wasit.
  *
- * Sengaja pakai `ws` (bukan Socket.IO namespace) karena webview WA cuma
- * bisa buka `new WebSocket(...)` native tanpa memuat library dari luar
- * (CSP webview memblokir script eksternal).
+ * Dipakai <script> di dalam HTML rich-response (native WebSocket, tanpa lib
+ * eksternal karena CSP webview WA memblokir script dari luar).
  *
  * Protokol pesan (JSON):
- *   server -> client : { type:'welcome', seat:'X'|'O'|'spec' }
+ *   server -> client : { type:'created', code, seat }
+ *                      { type:'joined', seat }
  *                      { type:'state', state, presence }
  *                      { type:'error', message }
- *   client -> server : { type:'move', pos:0..8 }
+ *   client -> server : { type:'create' }
+ *                      { type:'join', code }
+ *                      { type:'move', pos:0..8 }
  *                      { type:'reset' }
  */
 
@@ -28,36 +33,18 @@ const WIN_LINES = [
   [0, 4, 8], [2, 4, 6]
 ]
 
-/** room id -> { state, seats:{X,O}, clients:Set } */
+/** code (4 digit) -> { state, seats:{X,O}, clients:Set } */
 const rooms = new Map()
-
-/**
- * Info tambahan per-room yang ditanam server saat papan dikirim:
- *   { chatJid, members:[{id,name}] }
- * Dipakai buat fitur "tantang": webview kirim {type:'challenge',targetId},
- * server nge-tag orang itu di chat lewat bot. Diisi oleh registerRoom().
- */
-const roomMeta = new Map()
-
-export function registerRoom(roomId, meta) {
-  if (!roomId) return
-  roomMeta.set(roomId, {
-    chatJid: meta?.chatJid || '',
-    members: Array.isArray(meta?.members) ? meta.members : []
-  })
-}
 
 function freshState() {
   return { board: Array(9).fill(null), turn: 'X', winner: null, winLine: null }
 }
 
-function getRoom(id) {
-  let room = rooms.get(id)
-  if (!room) {
-    room = { state: freshState(), seats: { X: null, O: null }, clients: new Set() }
-    rooms.set(id, room)
-  }
-  return room
+// Kode room 4 digit (1000-9999) yang belum dipakai.
+function genCode() {
+  let code
+  do { code = String(Math.floor(1000 + Math.random() * 9000)) } while (rooms.has(code))
+  return code
 }
 
 function checkWin(board) {
@@ -83,98 +70,101 @@ function broadcastState(room) {
   for (const ws of room.clients) send(ws, msg)
 }
 
-// Kirim tantangan: bot nge-tag target di chat grup. Webview nggak bisa
-// "memunculkan" apa pun di HP orang lain, jadi undangan dikirim sebagai
-// pesan WA (mention) — target dapat notif lalu buka papan yang sama.
-async function handleChallenge(ws, roomId, targetId) {
-  const meta = roomMeta.get(roomId)
-  if (!meta || !meta.chatJid) { send(ws, { type: 'error', message: 'room tanpa info chat' }); return }
-  if (!targetId) { send(ws, { type: 'error', message: 'target kosong' }); return }
-  if (!bot?.sock) { send(ws, { type: 'error', message: 'bot offline' }); return }
+// Buat room baru: client jadi host (seat X), nunggu lawan gabung pakai kode.
+function handleCreate(ws) {
+  if (ws._code) { send(ws, { type: 'error', message: 'Kamu sudah di room' }); return }
+  const code = genCode()
+  const room = { state: freshState(), seats: { X: ws, O: null }, clients: new Set([ws]) }
+  rooms.set(code, room)
+  ws._code = code
+  ws._seat = 'X'
+  send(ws, { type: 'created', code, seat: 'X' })
+  broadcastState(room)
+  logger.info(`TTT room ${code} dibuat (menunggu lawan).`)
+}
 
-  const known = meta.members.find((m) => m.id === targetId)
-  const name = (known && known.name) || getName(targetId) || targetId.split('@')[0]
-  const num = targetId.split('@')[0]
+// Gabung room lewat kode: client jadi seat O kalau slot masih kosong.
+function handleJoin(ws, rawCode) {
+  const code = String(rawCode || '').trim()
+  if (ws._code) { send(ws, { type: 'error', message: 'Kamu sudah di room' }); return }
+  const room = rooms.get(code)
+  if (!room) { send(ws, { type: 'error', message: 'Room tidak ditemukan' }); return }
+  if (room.seats.X === ws) { send(ws, { type: 'error', message: 'Itu room kamu sendiri' }); return }
+  if (room.seats.O) { send(ws, { type: 'error', message: 'Room sudah penuh' }); return }
+  room.seats.O = ws
+  room.clients.add(ws)
+  ws._code = code
+  ws._seat = 'O'
+  send(ws, { type: 'joined', seat: 'O' })
+  broadcastState(room)
+  logger.info(`TTT room ${code}: lawan bergabung, mulai duel.`)
+}
 
-  try {
-    await bot.sock.sendMessage(meta.chatJid, {
-      text: `@${num} kamu ditantang main *Tic Tac Toe*! Buka papan Tic Tac Toe di chat ini lalu masuk lewat *Create Room* buat mulai duel realtime.`,
-      mentions: [targetId]
-    })
-    send(ws, { type: 'challenged', name })
-    logger.info(`TTT: tantangan dikirim ke ${name} (${roomId}).`)
-  } catch (e) {
-    send(ws, { type: 'error', message: 'gagal kirim tantangan' })
-    logger.error(`TTT challenge gagal: ${e.message}`)
+function handleMove(ws, rawPos) {
+  const room = rooms.get(ws._code)
+  if (!room) return
+  const s = room.state
+  const pos = Number(rawPos)
+  if (s.winner) return
+  if (!room.seats.X || !room.seats.O) return // lawan belum lengkap
+  if (ws._seat !== s.turn) return // bukan giliranmu
+  if (!Number.isInteger(pos) || pos < 0 || pos > 8) return
+  if (s.board[pos] !== null) return
+
+  s.board[pos] = s.turn
+  const line = checkWin(s.board)
+  if (line) {
+    s.winner = s.turn
+    s.winLine = line
+  } else if (s.board.every((c) => c !== null)) {
+    s.winner = 'SERI'
+  } else {
+    s.turn = s.turn === 'X' ? 'O' : 'X'
   }
+  broadcastState(room)
+}
+
+function handleReset(ws) {
+  const room = rooms.get(ws._code)
+  if (!room) return
+  if (ws._seat !== 'X' && ws._seat !== 'O') return
+  room.state = freshState()
+  broadcastState(room)
 }
 
 export function initGameSocket(httpServer) {
   const wss = new WebSocketServer({ server: httpServer, path: '/ttt' })
 
-  wss.on('connection', (ws, req) => {
-    const url = new URL(req.url, 'http://localhost')
-    const roomId = url.searchParams.get('room')
-    if (!roomId) {
-      send(ws, { type: 'error', message: 'room wajib' })
-      ws.close()
-      return
-    }
-
-    const room = getRoom(roomId)
-    room.clients.add(ws)
-
-    // Assign kursi: X dulu, lalu O, sisanya penonton.
-    let seat = 'spec'
-    if (!room.seats.X) { room.seats.X = ws; seat = 'X' }
-    else if (!room.seats.O) { room.seats.O = ws; seat = 'O' }
-    ws._roomId = roomId
-    ws._seat = seat
-
-    send(ws, { type: 'welcome', seat })
-    broadcastState(room)
+  wss.on('connection', (ws) => {
+    // Koneksi mulai "kosong" — belum di room mana pun. Room ditentukan
+    // saat client kirim create/join. Jadi nggak perlu ?room= di URL.
+    ws._code = null
+    ws._seat = null
 
     ws.on('message', (raw) => {
       let msg
       try { msg = JSON.parse(raw.toString()) } catch { return }
 
-      if (msg.type === 'move') {
-        const s = room.state
-        const pos = Number(msg.pos)
-        if (s.winner) return
-        if (ws._seat !== s.turn) return // bukan giliranmu / penonton
-        if (!Number.isInteger(pos) || pos < 0 || pos > 8) return
-        if (s.board[pos] !== null) return
-
-        s.board[pos] = s.turn
-        const line = checkWin(s.board)
-        if (line) {
-          s.winner = s.turn
-          s.winLine = line
-        } else if (s.board.every((c) => c !== null)) {
-          s.winner = 'SERI'
-        } else {
-          s.turn = s.turn === 'X' ? 'O' : 'X'
-        }
-        broadcastState(room)
-      } else if (msg.type === 'reset') {
-        if (ws._seat !== 'X' && ws._seat !== 'O') return // penonton nggak boleh reset
-        room.state = freshState()
-        broadcastState(room)
-      } else if (msg.type === 'challenge') {
-        // Tantang orang tertentu: bot nge-tag dia di chat grup biar dapat
-        // notifikasi & tinggal buka papan yang sama buat gabung.
-        handleChallenge(ws, roomId, msg.targetId)
-      }
+      if (msg.type === 'create') handleCreate(ws)
+      else if (msg.type === 'join') handleJoin(ws, msg.code)
+      else if (msg.type === 'move') handleMove(ws, msg.pos)
+      else if (msg.type === 'reset') handleReset(ws)
     })
 
     ws.on('close', () => {
+      const code = ws._code
+      if (!code) return
+      const room = rooms.get(code)
+      if (!room) return
       room.clients.delete(ws)
       if (room.seats.X === ws) room.seats.X = null
       if (room.seats.O === ws) room.seats.O = null
       if (room.clients.size === 0) {
-        rooms.delete(roomId)
+        rooms.delete(code)
+        logger.info(`TTT room ${code} kosong — dihapus.`)
       } else {
+        // Sisakan pemain lain -> presence update jadi "menunggu lawan" lagi;
+        // slot yang kosong bisa diisi orang lain yang join pakai kode sama.
         broadcastState(room)
       }
     })
@@ -185,3 +175,4 @@ export function initGameSocket(httpServer) {
 }
 
 export default initGameSocket
+
