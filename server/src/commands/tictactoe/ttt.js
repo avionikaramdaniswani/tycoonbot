@@ -23,7 +23,7 @@ import {
   deleteChallenge
 } from '../../game/tictactoe/store.js'
 import { renderBoardHtml } from '../../game/tictactoe/render-html.js'
-import { renderBoardImage } from '../../game/tictactoe/render-image.js'
+
 import { bot } from '../../bot/BotManager.js'
 
 import config from '../../config/index.js'
