@@ -48,14 +48,16 @@ async function sendBoard(sock, jid, game, statusText, quoted) {
     .setImage(imageBuffer)
     .setBody(`🎮 *TIC TAC TOE*\n\n❌ ${p1}  vs  ⭕ ${p2}\n\n${statusText}`)
 
-  // Kalau game masih berjalan, tambahkan suggest buttons.
+  // Kalau game masih berjalan, tambahkan pilihan gerakan
   if (!game.winner) {
     const moves = availableMoves(game)
+    
+    // Kembalikan jadi tombol pencet langsung (Quick Reply)
     moves.forEach((pos) => {
       btn.addReply(`Pilih ${pos}`, `${PREFIX}ttt ${pos}`)
     })
     
-    // Tambahkan tombol nyerah kalau masih main
+    // Tambahkan 1 tombol biasa untuk nyerah
     btn.addReply('🏳️ Nyerah', `${PREFIX}ttt quit`)
   }
 
