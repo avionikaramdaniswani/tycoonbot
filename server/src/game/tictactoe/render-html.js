@@ -314,6 +314,10 @@ export async function renderBoardHtml(game, opts = {}) {
               goto('game', name ? ('Menantang ' + name) : 'Menyambungkan', 900);
               connectWs();
             }
+            let retryTimer = null;
+            let retryDelay = 1000; // mulai dari 1 detik
+            const MAX_RETRY_DELAY = 30000; // maksimal 30 detik
+
             function connectWs() {
               if (!ONLINE_OK) { lastEvt = 'no-url'; render(); return; }
               closeWs();
@@ -324,9 +328,14 @@ export async function renderBoardHtml(game, opts = {}) {
               } catch (err) {
                 lastEvt = 'throw:' + (err && err.message ? err.message : err);
                 render();
+                scheduleReconnect(g);
                 return;
               }
-              ws.onopen = function() { lastEvt = 'open'; render(); };
+              ws.onopen = function() {
+                lastEvt = 'open';
+                retryDelay = 1000; // reset delay saat berhasil konek
+                render();
+              };
               ws.onmessage = function(ev) {
                 if (mode !== 'online' || g !== gen) return;
                 lastEvt = 'msg';
@@ -357,10 +366,37 @@ export async function renderBoardHtml(game, opts = {}) {
                 }
                 render();
               };
-              ws.onerror = function() { lastEvt = 'error'; if (mode === 'online' && g === gen) render(); };
-              ws.onclose = function(e) { lastEvt = 'close:' + (e && e.code); if (mode === 'online' && g === gen) render(); };
+              ws.onerror = function() {
+                lastEvt = 'error';
+                if (mode === 'online' && g === gen) {
+                  render();
+                  scheduleReconnect(g);
+                }
+              };
+              ws.onclose = function(e) {
+                lastEvt = 'close:' + (e && e.code);
+                if (mode === 'online' && g === gen) {
+                  render();
+                  scheduleReconnect(g);
+                }
+              };
+            }
+
+            function scheduleReconnect(g) {
+              if (retryTimer) clearTimeout(retryTimer);
+              if (mode !== 'online' || g !== gen) return;
+              retryTimer = setTimeout(function() {
+                if (mode === 'online' && g === gen) {
+                  lastEvt = 'reconnecting';
+                  render();
+                  connectWs();
+                }
+              }, retryDelay);
+              // Exponential backoff: 1s -> 2s -> 4s -> 8s -> ... -> 30s max
+              retryDelay = Math.min(retryDelay * 2, MAX_RETRY_DELAY);
             }
             function closeWs() {
+              if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
               if (ws) { try { ws.onclose = null; ws.close(); } catch (e) {} ws = null; }
               seat = null; presence = { X: false, O: false };
             }

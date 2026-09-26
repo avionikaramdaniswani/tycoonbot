@@ -17,9 +17,23 @@ function deriveWsUrl() {
   return wsBase.replace(/\/+$/, '') + '/ttt'
 }
 
+// Format nomor mentah jadi lebih rapi: 6285709557572 -> +62 857-0955-7572
+function formatNumber(raw) {
+  if (!raw) return 'Pemain'
+  // Hapus @s.whatsapp.net kalau ada
+  const num = raw.split('@')[0]
+  if (num.length < 5) return num
+  // Format: +{kode negara} {4 digit}-{4 digit}-{sisa}
+  if (num.startsWith('62') && num.length >= 10) {
+    return `+62 ${num.slice(2, 5)}-${num.slice(5, 9)}-${num.slice(9)}`
+  }
+  // Generic: +{kode} {sisa dikelompokkan per 4}
+  return '+' + num.replace(/(\d{2})(\d{4})(\d{4})(\d*)/, '$1 $2-$3-$4').replace(/-$/, '')
+}
+
 // Ambil daftar anggota grup buat lobby "Create Room" -> [{id, name}].
 // Nama diambil dari cache pushName (nama asli yang pernah kirim pesan);
-// kalau belum ada, fallback ke nomor. Bot & penantang dikeluarkan.
+// kalau belum ada, fallback ke nomor yang diformat rapi. Bot & penantang dikeluarkan.
 async function getGroupMembers(sock, msg) {
   if (!msg.isGroup) return []
   try {
@@ -30,8 +44,7 @@ async function getGroupMembers(sock, msg) {
     for (const p of meta?.participants || []) {
       const id = jidNormalizedUser(p.id)
       if (id === meJid || id === senderJid) continue
-      const num = id.split('@')[0]
-      out.push({ id, name: getName(id) || num })
+      out.push({ id, name: getName(id) || formatNumber(id) })
     }
     return out
   } catch {
