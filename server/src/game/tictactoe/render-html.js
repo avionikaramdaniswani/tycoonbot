@@ -1,9 +1,19 @@
 
 
+import { AI_JID } from './engine.js'
+
 /**
  * Render Tic Tac Toe board murni dari HTML & CSS!
+ * Game berjalan penuh di sisi client (seperti Anya Chess) — semua state & AI
+ * ada di dalam <script>, jadi klik langsung diproses di dalam bubble WA.
  */
 export async function renderBoardHtml(game) {
+  // Sel kosong di engine = null; untuk client kita normalkan jadi '' supaya
+  // semua perbandingan (=== '') di dalam <script> konsisten.
+  const boardForClient = game.board.map((c) => c || '')
+  // AI aktif kalau salah satu pemain adalah bot.
+  const isAi = !!(game.players && (game.players.X === AI_JID || game.players.O === AI_JID))
+
   const getCell = (mark, index) => {
     let content = mark
     if (!mark) content = `<span class="number">${index + 1}</span>`
@@ -100,9 +110,9 @@ export async function renderBoardHtml(game) {
 
         <script>
           document.addEventListener('DOMContentLoaded', function() {
-            let board = ${JSON.stringify(game.board)};
+            let board = ${JSON.stringify(boardForClient)};
             let turn = '${game.turn}';
-            let isAi = ${game.isAi};
+            let isAi = ${isAi};
             let winner = null;
 
             function checkWinner(b) {
@@ -118,10 +128,49 @@ export async function renderBoardHtml(game) {
               return null;
             }
 
+            // AI unbeatable (minimax). AI = 'O', pemain = 'X'.
             function getBestMove(b) {
-              const empty = b.map((v, i) => v === '' ? i : -1).filter(v => v !== -1);
-              if (empty.length === 0) return -1;
-              return empty[Math.floor(Math.random() * empty.length)];
+              function winnerOf(bd) {
+                const L = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+                for (const [x,y,z] of L) {
+                  if (bd[x] && bd[x] === bd[y] && bd[x] === bd[z]) return bd[x];
+                }
+                return null;
+              }
+              function mm(bd, isMax, depth) {
+                const w = winnerOf(bd);
+                if (w === 'O') return 10 - depth;
+                if (w === 'X') return depth - 10;
+                if (!bd.includes('')) return 0;
+                if (isMax) {
+                  let best = -Infinity;
+                  for (let i = 0; i < 9; i++) {
+                    if (bd[i] !== '') continue;
+                    bd[i] = 'O';
+                    best = Math.max(best, mm(bd, false, depth + 1));
+                    bd[i] = '';
+                  }
+                  return best;
+                } else {
+                  let best = Infinity;
+                  for (let i = 0; i < 9; i++) {
+                    if (bd[i] !== '') continue;
+                    bd[i] = 'X';
+                    best = Math.min(best, mm(bd, true, depth + 1));
+                    bd[i] = '';
+                  }
+                  return best;
+                }
+              }
+              let bestScore = -Infinity, bestMove = -1;
+              for (let i = 0; i < 9; i++) {
+                if (b[i] !== '') continue;
+                b[i] = 'O';
+                const s = mm(b, false, 1);
+                b[i] = '';
+                if (s > bestScore) { bestScore = s; bestMove = i; }
+              }
+              return bestMove;
             }
 
             function render() {
@@ -150,11 +199,12 @@ export async function renderBoardHtml(game) {
               }
             }
 
-            // Gunakan event delegation di container board agar lebih kebal CSP/re-render
-            document.getElementById('board').addEventListener('click', function(e) {
+            // Event delegation + pointerdown (seperti Anya Chess) supaya responsif di WA webview.
+            document.getElementById('board').addEventListener('pointerdown', function(e) {
               const cell = e.target.closest('.cell');
               if (!cell) return;
-              
+              e.preventDefault();
+
               const pos = parseInt(cell.getAttribute('data-index'));
               if (isNaN(pos) || winner || board[pos] !== '') return;
               
