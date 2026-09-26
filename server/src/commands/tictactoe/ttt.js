@@ -5,13 +5,25 @@ import config from '../../config/index.js'
 
 const PREFIX = config.bot.prefix
 
+// Ubah PUBLIC_URL (http/https) jadi endpoint WebSocket (ws/wss) + path /ttt.
+// Kalau PUBLIC_URL kosong, kembalikan '' -> mode Online otomatis nonaktif.
+function deriveWsUrl() {
+  const base = config.publicUrl
+  if (!base) return ''
+  const wsBase = base.replace(/^http/i, (m) => (m.toLowerCase() === 'https' ? 'wss' : 'ws'))
+  return wsBase.replace(/\/+$/, '') + '/ttt'
+}
+
 // ── Kirim papan interaktif (HTML Primitive / AIRich) ────────────────
 // Game berjalan penuh di sisi client di dalam bubble WA — semua state,
 // giliran, mode (vs AI / 2 Player), reset & minimax ada di dalam HTML.
 // Bot cuma perlu mengirim papannya sekali, nggak menyimpan state apa pun.
 
 async function sendBoard(sock, jid, game, quoted) {
-  const rawHtml = await renderBoardHtml(game)
+  const wsUrl = deriveWsUrl()
+  // Room id ditanam di payload pesan; semua yang buka pesan ini share room.
+  const room = `ttt-${game.startedAt}-${Math.random().toString(36).slice(2, 8)}`
+  const rawHtml = await renderBoardHtml(game, { wsUrl, room })
 
   await sock.relayMessage(
     jid,
@@ -94,7 +106,8 @@ async function handleHelp(sock, msg) {
     '• Tombol ♻️ New buat mulai ulang.',
     '',
     'Mode 2 Player = gantian tap di layar yang sama (pass-and-play).',
-    'Mode vs AI = kamu ❌ lawan bot ⭕ (unbeatable).'
+    'Mode vs AI = kamu lawan bot (unbeatable).',
+    'Mode Online = main real-time beda HP (butuh server publik / PUBLIC_URL).'
   ].join('\n')
 
   await sendText(sock, msg.from, '🎮 TIC TAC TOE — Bantuan', text, msg)

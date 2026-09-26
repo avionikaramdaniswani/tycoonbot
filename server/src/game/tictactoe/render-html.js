@@ -7,12 +7,15 @@ import { AI_JID } from './engine.js'
  * Game berjalan penuh di sisi client (seperti Anya Chess) — semua state & AI
  * ada di dalam <script>, jadi klik langsung diproses di dalam bubble WA.
  */
-export async function renderBoardHtml(game) {
+export async function renderBoardHtml(game, opts = {}) {
   // Sel kosong di engine = null; untuk client kita normalkan jadi '' supaya
   // semua perbandingan (=== '') di dalam <script> konsisten.
   const boardForClient = game.board.map((c) => c || '')
   // AI aktif kalau salah satu pemain adalah bot.
   const isAi = !!(game.players && (game.players.X === AI_JID || game.players.O === AI_JID))
+  // Untuk mode Online (multiplayer real-time lewat WebSocket di dalam HTML).
+  const wsUrl = opts.wsUrl || ''
+  const room = opts.room || ''
 
   const getCell = (mark, index) => {
     let content = mark
@@ -133,6 +136,7 @@ export async function renderBoardHtml(game) {
           <div class="controls">
             <button class="ctrl" data-mode="ai" id="btn-ai">vs AI</button>
             <button class="ctrl" data-mode="pvp" id="btn-pvp">2 Pemain</button>
+            <button class="ctrl" data-mode="online" id="btn-online">Online</button>
             <button class="ctrl" id="btn-new">Reset</button>
           </div>
         </div>
@@ -146,6 +150,14 @@ export async function renderBoardHtml(game) {
             let winner = null;
             let aiThinking = false;
             let gen = 0;
+
+            // Online (multiplayer via WebSocket yang ditanam di HTML ini).
+            const WS_URL = ${JSON.stringify(wsUrl)};
+            const ROOM = ${JSON.stringify(room)};
+            const ONLINE_OK = !!(WS_URL && ROOM);
+            let ws = null;
+            let seat = null;
+            let presence = { X: false, O: false };
 
             function checkWinner(b) {
               const lines = [
@@ -220,6 +232,10 @@ export async function renderBoardHtml(game) {
               boardEl.innerHTML = html;
               
               const statusEl = document.getElementById('status');
+              if (mode === 'online') {
+                statusEl.innerText = onlineStatusText();
+                return;
+              }
               if (winner) {
                 if (winner === 'SERI') {
                   statusEl.innerText = 'Seri';
@@ -231,6 +247,23 @@ export async function renderBoardHtml(game) {
               } else {
                 statusEl.innerText = 'Giliran ' + turn;
               }
+            }
+
+            // Teks status khusus mode Online (bergantung kursi & kehadiran lawan).
+            function onlineStatusText() {
+              if (!ONLINE_OK) return 'Mode Online belum aktif';
+              if (!ws || ws.readyState !== 1) return 'Menyambungkan…';
+              if (seat === 'spec') {
+                if (winner) return winner === 'SERI' ? 'Seri' : 'Pemain ' + winner + ' menang';
+                return 'Nonton • Giliran ' + turn;
+              }
+              if (!seat) return 'Menyambungkan…';
+              if (!presence.X || !presence.O) return 'Menunggu lawan…';
+              if (winner) {
+                if (winner === 'SERI') return 'Seri';
+                return winner === seat ? 'Kamu menang' : 'Lawan menang';
+              }
+              return (turn === seat ? 'Giliranmu' : 'Giliran lawan') + ' • Kamu ' + seat;
             }
 
             function resetBoard() {
@@ -245,13 +278,82 @@ export async function renderBoardHtml(game) {
             function updateControls() {
               document.getElementById('btn-ai').classList.toggle('active', mode === 'ai');
               document.getElementById('btn-pvp').classList.toggle('active', mode === 'pvp');
+              const onlineBtn = document.getElementById('btn-online');
+              onlineBtn.classList.toggle('active', mode === 'online');
+              // Kalau server publik belum di-set, tombol Online dinonaktifkan.
+              if (!ONLINE_OK) {
+                onlineBtn.disabled = true;
+                onlineBtn.style.opacity = '0.4';
+              }
             }
 
             function setMode(m) {
+              if (m === mode) return;
+              // Keluar dari Online -> tutup koneksi biar kursi bebas buat orang lain.
+              if (mode === 'online' && m !== 'online') closeWs();
               mode = m;
               isAi = (m === 'ai');
               updateControls();
-              resetBoard();
+              if (m === 'online') {
+                board = ['', '', '', '', '', '', '', '', ''];
+                turn = 'X';
+                winner = null;
+                seat = null;
+                presence = { X: false, O: false };
+                gen++;
+                aiThinking = false;
+                render();
+                connectWs();
+              } else {
+                resetBoard();
+              }
+            }
+
+            // ── WebSocket multiplayer (server sebagai wasit) ──────────────
+            function connectWs() {
+              if (!ONLINE_OK) return;
+              closeWs();
+              const myGen = gen;
+              try {
+                ws = new WebSocket(WS_URL + '?room=' + encodeURIComponent(ROOM));
+              } catch (e) {
+                render();
+                return;
+              }
+              ws.onopen = function() { render(); };
+              ws.onmessage = function(ev) {
+                // Abaikan kalau sudah pindah mode selama koneksi.
+                if (mode !== 'online' || myGen !== gen) return;
+                let msg;
+                try { msg = JSON.parse(ev.data); } catch (e) { return; }
+                if (msg.type === 'welcome') {
+                  seat = msg.seat;
+                } else if (msg.type === 'state') {
+                  const s = msg.state;
+                  board = s.board.map(function(c) { return c || ''; });
+                  turn = s.turn;
+                  winner = s.winner || null;
+                  if (msg.presence) presence = msg.presence;
+                }
+                render();
+              };
+              ws.onclose = function() {
+                if (mode === 'online' && myGen === gen) render();
+              };
+              ws.onerror = function() {};
+            }
+
+            function closeWs() {
+              if (ws) {
+                try { ws.onclose = null; ws.close(); } catch (e) {}
+                ws = null;
+              }
+            }
+
+            function wsSend(obj) {
+              if (ws && ws.readyState === 1) {
+                try { ws.send(JSON.stringify(obj)); } catch (e) {}
+              }
             }
 
             // Event delegation + pointerdown (seperti Anya Chess) supaya responsif di WA webview.
@@ -264,7 +366,19 @@ export async function renderBoardHtml(game) {
               if (aiThinking) return;
 
               const pos = parseInt(cell.getAttribute('data-index'));
-              if (isNaN(pos) || winner || board[pos] !== '') return;
+              if (isNaN(pos)) return;
+
+              // Mode Online: server yang jadi wasit — cukup kirim langkah,
+              // state datang balik lewat pesan 'state'. Jangan ubah board lokal.
+              if (mode === 'online') {
+                if (!ONLINE_OK || seat === 'spec' || !seat) return;
+                if (winner || turn !== seat || board[pos] !== '') return;
+                if (!presence.X || !presence.O) return; // lawan belum ada
+                wsSend({ type: 'move', pos: pos });
+                return;
+              }
+
+              if (winner || board[pos] !== '') return;
 
               // Langkah pemain.
               board[pos] = turn;
@@ -312,7 +426,13 @@ export async function renderBoardHtml(game) {
             
             document.getElementById('btn-ai').addEventListener('pointerdown', function(e) { e.preventDefault(); setMode('ai'); });
             document.getElementById('btn-pvp').addEventListener('pointerdown', function(e) { e.preventDefault(); setMode('pvp'); });
-            document.getElementById('btn-new').addEventListener('pointerdown', function(e) { e.preventDefault(); resetBoard(); });
+            document.getElementById('btn-online').addEventListener('pointerdown', function(e) { e.preventDefault(); if (ONLINE_OK) setMode('online'); });
+            document.getElementById('btn-new').addEventListener('pointerdown', function(e) {
+              e.preventDefault();
+              // Di Online, reset harus lewat server biar kedua pemain sinkron.
+              if (mode === 'online') { wsSend({ type: 'reset' }); return; }
+              resetBoard();
+            });
 
             // Render pertama kali
             updateControls();

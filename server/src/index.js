@@ -2,6 +2,7 @@ import http from 'node:http'
 import config from './config/index.js'
 import { createApp } from './web/app.js'
 import { initSocket } from './web/socket.js'
+import { initGameSocket } from './web/gameSocket.js'
 import { bot } from './bot/BotManager.js'
 import { logger } from './lib/logger.js'
 import { ensureDir } from './lib/utils.js'
@@ -31,10 +32,16 @@ async function main() {
   const app = createApp()
   const server = http.createServer(app)
   initSocket(server)
+  initGameSocket(server)
 
   server.listen(config.port, () => {
     logger.success(`Server & API jalan di http://localhost:${config.port}`)
     logger.info(`Dashboard (dev) diharapkan di ${config.corsOrigin}`)
+    if (config.publicUrl) {
+      logger.info(`URL publik (WS game): ${config.publicUrl}`)
+    } else {
+      logger.warn('PUBLIC_URL belum di-set — mode Online (multiplayer) nonaktif.')
+    }
     logger.info('Buka dashboard lalu tekan START untuk menyalakan bot.')
   })
 }

@@ -16,6 +16,13 @@ export const config = {
   port: Number(process.env.PORT) || 3000,
   corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:5173',
 
+  // URL publik server ini (buat WebSocket game di dalam HTML rich-response).
+  // HP pemain nggak bisa akses localhost, jadi ini HARUS domain/host publik
+  // yang bisa dijangkau internet, idealnya TLS (https/wss). Contoh:
+  //   PUBLIC_URL=https://bot.domainku.com
+  // Kalau kosong, mode Online otomatis dinonaktifkan di papan.
+  publicUrl: process.env.PUBLIC_URL || '',
+
   auth: {
     user: process.env.DASHBOARD_USER || 'admin',
     password: process.env.DASHBOARD_PASSWORD || 'admin123',
