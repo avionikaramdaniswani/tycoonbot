@@ -22,6 +22,10 @@ server/data/*.json
 # Build output
 dashboard/dist/
 
+# Binary cloudflared (diunduh otomatis saat runtime di server)
+server/bin/
+bin/cloudflared
+
 # Misc
 .DS_Store
 Thumbs.db

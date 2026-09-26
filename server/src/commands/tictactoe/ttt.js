@@ -1,5 +1,6 @@
 import { createGame, AI_JID } from '../../game/tictactoe/engine.js'
 import { renderBoardHtml } from '../../game/tictactoe/render-html.js'
+import { jidNormalizedUser } from '@vanzxy/baileys'
 
 import config from '../../config/index.js'
 
@@ -14,6 +15,28 @@ function deriveWsUrl() {
   return wsBase.replace(/\/+$/, '') + '/ttt'
 }
 
+// Ambil daftar anggota grup buat lobby "Create Room" -> [{id, name}].
+// Tanpa store kontak, nama = nomor (fallback). Bot sendiri & penantang
+// dikeluarkan. Kalau bukan grup / gagal, kembalikan [] (lobby tampil kosong).
+async function getGroupMembers(sock, msg) {
+  if (!msg.isGroup) return []
+  try {
+    const meta = await sock.groupMetadata(msg.from)
+    const meJid = sock.user?.id ? jidNormalizedUser(sock.user.id) : ''
+    const senderJid = msg.sender ? jidNormalizedUser(msg.sender) : ''
+    const out = []
+    for (const p of meta?.participants || []) {
+      const id = jidNormalizedUser(p.id)
+      if (id === meJid || id === senderJid) continue
+      const num = id.split('@')[0]
+      out.push({ id, name: num })
+    }
+    return out
+  } catch {
+    return []
+  }
+}
+
 // ── Kirim papan interaktif (HTML Primitive / AIRich) ────────────────
 // Game berjalan penuh di sisi client di dalam bubble WA — semua state,
 // giliran, mode (vs AI / 2 Player), reset & minimax ada di dalam HTML.
@@ -23,7 +46,8 @@ async function sendBoard(sock, jid, game, quoted) {
   const wsUrl = deriveWsUrl()
   // Room id ditanam di payload pesan; semua yang buka pesan ini share room.
   const room = `ttt-${game.startedAt}-${Math.random().toString(36).slice(2, 8)}`
-  const rawHtml = await renderBoardHtml(game, { wsUrl, room })
+  const members = await getGroupMembers(sock, quoted)
+  const rawHtml = await renderBoardHtml(game, { wsUrl, room, members })
 
   await sock.relayMessage(
     jid,
