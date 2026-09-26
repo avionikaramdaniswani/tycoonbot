@@ -22,6 +22,7 @@ import {
   setChallenge,
   deleteChallenge
 } from '../../game/tictactoe/store.js'
+import { renderBoardToBuffer } from '../../game/tictactoe/render.js'
 import config from '../../config/index.js'
 
 const PREFIX = config.bot.prefix
@@ -29,29 +30,6 @@ const PREFIX = config.bot.prefix
 // ── Emoji & visual ──────────────────────────────────────────
 
 const MARK_EMOJI = { X: '❌', O: '⭕' }
-const NUM_EMOJI = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣']
-
-function cellEmoji(board, index) {
-  if (board[index] === 'X') return '❌'
-  if (board[index] === 'O') return '⭕'
-  return NUM_EMOJI[index]  // posisi kosong → tampilkan nomornya
-}
-
-function boardText(board, winLine) {
-  const c = (i) => {
-    const emoji = cellEmoji(board, i)
-    // Highlight garis pemenang
-    if (winLine && winLine.includes(i)) return `⟪${emoji}⟫`
-    return ` ${emoji} `
-  }
-  return [
-    `${c(0)}│${c(1)}│${c(2)}`,
-    '────┼────┼────',
-    `${c(3)}│${c(4)}│${c(5)}`,
-    '────┼────┼────',
-    `${c(6)}│${c(7)}│${c(8)}`
-  ].join('\n')
-}
 
 function mention(jid) {
   if (jid === AI_JID) return '🤖 AI'
@@ -61,16 +39,16 @@ function mention(jid) {
 // ── AIRich renderers ────────────────────────────────────────
 
 async function sendBoard(sock, jid, game, statusText, quoted) {
-  const board = boardText(game.board, game.winLine)
+  const imageBuffer = await renderBoardToBuffer(game)
 
   const p1 = mention(game.players.X)
   const p2 = mention(game.players.O)
 
   const rich = new AIRich(sock)
+    .addImage(imageBuffer)
     .addHeading('🎮 TIC TAC TOE')
-    .addText(board)
-    .addDivider()
     .addText(`❌ ${p1}  vs  ⭕ ${p2}`)
+    .addDivider()
     .addText(statusText)
 
   // Kalau game masih berjalan, tambahkan suggest buttons.
