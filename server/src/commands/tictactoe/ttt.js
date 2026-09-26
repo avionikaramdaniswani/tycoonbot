@@ -23,6 +23,7 @@ import {
   deleteChallenge
 } from '../../game/tictactoe/store.js'
 import { renderBoardHtml } from '../../game/tictactoe/render-html.js'
+import { bot } from '../../bot/BotManager.js'
 import config from '../../config/index.js'
 
 const PREFIX = config.bot.prefix
@@ -35,6 +36,55 @@ function mention(jid) {
   if (jid === AI_JID) return '🤖 AI'
   return `@${jid.split('@')[0]}`
 }
+
+// ── WEBVIEW WEBSOCKET HANDLER ───────────────────────────────
+
+bot.on('webview_ttt_move', async ({ gameId, pos, socket }) => {
+  const game = getGame(gameId)
+  if (!game) return
+
+  // Pastikan posisi valid
+  const movePos = parseInt(pos, 10)
+  if (isNaN(movePos) || movePos < 0 || movePos > 8 || game.board[movePos] !== '') return
+  if (game.winner) return
+
+  // Jalankan langkah
+  // (Untuk Webview AI, karena Webview tidak tahu siapa pemainnya, kita asumsikan yang mencet adalah X)
+  game.board[movePos] = game.turn
+  game.turn = game.turn === 'X' ? 'O' : 'X'
+
+  const winCombo = checkWinner(game.board)
+  if (winCombo) {
+    game.winner = game.board[winCombo[0]]
+    game.winLine = winCombo
+  } else if (!game.board.includes('')) {
+    game.winner = 'SERI'
+  } else if (game.isAi && game.turn === 'O') {
+    // Jalankan giliran AI
+    const aiMove = getBestMove(game.board)
+    if (aiMove !== -1) {
+      game.board[aiMove] = 'O'
+      game.turn = 'X'
+      const aiWinCombo = checkWinner(game.board)
+      if (aiWinCombo) {
+        game.winner = 'O'
+        game.winLine = aiWinCombo
+      } else if (!game.board.includes('')) {
+        game.winner = 'SERI'
+      }
+    }
+  }
+
+  setGame(gameId, game)
+
+  // Update ke Webview agar UI-nya berubah otomatis!
+  bot.emit('ttt_update', { gameId, board: game.board })
+
+  // (Opsional: Kalau game selesai, hapus dari memory. Tapi biarkan dulu agar user bisa lihat hasilnya di Webview)
+  if (game.winner) {
+    // deleteGame(gameId) // Jangan dihapus dulu, biar UI Webview bisa gambar status menang
+  }
+})
 
 // ── AIRich renderers ────────────────────────────────────────
 

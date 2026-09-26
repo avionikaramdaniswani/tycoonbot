@@ -37,6 +37,22 @@ export function initSocket(httpServer) {
   bot.on('ready', (user) => io.emit('ready', user))
   logBus.on('log', (entry) => io.emit('log', entry))
 
+  // Namespace publik untuk game dari Webview (tanpa JWT Auth)
+  const gameIo = io.of('/game')
+  gameIo.on('connection', (socket) => {
+    // Terima pergerakan pemain dari Webview
+    socket.on('ttt_move', async ({ gameId, pos }) => {
+      // Panggil command proses jalan seolah-olah dari chat (lewat event bus atau jalankan command)
+      // Karena agak rumit memanggil command murni dari luar message WA, kita emit event khusus.
+      bot.emit('webview_ttt_move', { gameId, pos, socket })
+    })
+  })
+
+  // Kalau mau update UI Webview dari BotManager
+  bot.on('ttt_update', ({ gameId, board }) => {
+    gameIo.emit('boardUpdate', board)
+  })
+
   return io
 }
 

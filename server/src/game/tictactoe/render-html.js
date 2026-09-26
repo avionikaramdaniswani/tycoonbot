@@ -9,7 +9,8 @@ export async function renderBoardHtml(game) {
     if (!mark) content = `<span class="number">${index + 1}</span>`
     
     let isWin = game.winLine && game.winLine.includes(index)
-    return `<div class="cell ${isWin ? 'win' : ''} ${mark === 'X' ? 'x' : mark === 'O' ? 'o' : ''}">${content}</div>`
+    // Tambahkan event onclick ke HTML
+    return `<div class="cell ${isWin ? 'win' : ''} ${mark === 'X' ? 'x' : mark === 'O' ? 'o' : ''}" onclick="makeMove(${index})">${content}</div>`
   }
 
   const html = `
@@ -63,14 +64,53 @@ export async function renderBoardHtml(game) {
             color: #1a1c29;
             box-shadow: 0 0 20px rgba(224, 175, 104, 0.5);
           }
+          .cell:active { transform: scale(0.95); }
         </style>
       </head>
       <body>
         <div class="board-container">
-          <div class="grid">
+          <div class="grid" id="board">
             ${game.board.map((mark, i) => getCell(mark, i)).join('')}
           </div>
         </div>
+
+        <!-- Tambahkan Socket.IO Client -->
+        <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+        <script>
+          // Koneksi ke server bot (Ganti PUBLIC_URL di .env nanti kalau sudah di Pterodactyl)
+          const WS_URL = "${process.env.PUBLIC_URL || 'http://localhost:2397'}";
+          const gameId = "${game.id}"; // ID Chat
+          
+          const socket = io(WS_URL + '/game');
+          
+          socket.on('connect', () => {
+            console.log('Terhubung ke server bot!');
+          });
+
+          // Kalau ada update papan dari server (misal musuh/AI jalan)
+          socket.on('boardUpdate', (newBoard) => {
+            const boardEl = document.getElementById('board');
+            let html = '';
+            newBoard.forEach((mark, i) => {
+              let cellClass = mark === 'X' ? 'x' : (mark === 'O' ? 'o' : '');
+              let content = mark ? mark : '<span class="number">' + (i + 1) + '</span>';
+              html += '<div class="cell ' + cellClass + '" onclick="makeMove(' + i + ')">' + content + '</div>';
+            });
+            boardEl.innerHTML = html;
+          });
+
+          // Fungsi saat kotak dipencet
+          window.makeMove = function(pos) {
+            // Kirim event ke server bot
+            socket.emit('ttt_move', { gameId, pos });
+            
+            // Beri efek loading sementara
+            const cells = document.querySelectorAll('.cell');
+            if(cells[pos] && !cells[pos].classList.contains('x') && !cells[pos].classList.contains('o')) {
+               cells[pos].innerHTML = '...';
+            }
+          }
+        </script>
       </body>
     </html>
   `
