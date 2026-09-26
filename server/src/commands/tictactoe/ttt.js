@@ -1,4 +1,4 @@
-import { AIRich, Toolkit } from '@vanzxy/baileys'
+import { AIRich, Button, Toolkit } from '@vanzxy/baileys'
 
 // Patch: @vanzxy/baileys v2.0.3 — AIRich.build() memanggil Toolkit.stringifyEscaped()
 // tapi method itu belum ada di shared.js. Tambahkan polyfill supaya tidak crash.
@@ -44,31 +44,36 @@ async function sendBoard(sock, jid, game, statusText, quoted) {
   const p1 = mention(game.players.X)
   const p2 = mention(game.players.O)
 
-  const rich = new AIRich(sock)
-    .addImage(imageBuffer)
-    .addHeading('🎮 TIC TAC TOE')
-    .addText(`❌ ${p1}  vs  ⭕ ${p2}`)
-    .addDivider()
-    .addText(statusText)
+  const btn = new Button(sock)
+    .setImage(imageBuffer)
+    .setBody(`🎮 *TIC TAC TOE*\n\n❌ ${p1}  vs  ⭕ ${p2}\n\n${statusText}`)
 
   // Kalau game masih berjalan, tambahkan suggest buttons.
   if (!game.winner) {
     const moves = availableMoves(game)
-    const suggestions = moves.map((pos) => `${PREFIX}ttt ${pos}`)
-    rich.addSuggest(suggestions)
+    moves.forEach((pos) => {
+      btn.addReply(`Pilih ${pos}`, `${PREFIX}ttt ${pos}`)
+    })
+    
+    // Tambahkan tombol nyerah kalau masih main
+    btn.addReply('🏳️ Nyerah', `${PREFIX}ttt quit`)
   }
 
-  await rich.send(jid, { quoted: quoted?.raw })
+  await btn.send(jid, { quoted: quoted?.raw })
 }
 
 async function sendRich(sock, jid, heading, text, quoted, suggests) {
-  const rich = new AIRich(sock)
-    .addHeading(heading)
-    .addText(text)
+  // Gunakan Button untuk notifikasi biasa agar konsisten dengan native flow
+  const btn = new Button(sock)
+    .setBody(`*${heading}*\n\n${text}`)
+    
   if (suggests && suggests.length) {
-    rich.addSuggest(suggests)
+    suggests.forEach((cmd) => {
+      const label = cmd.replace(`${PREFIX}ttt `, '').toUpperCase()
+      btn.addReply(label, cmd)
+    })
   }
-  await rich.send(jid, { quoted: quoted?.raw })
+  await btn.send(jid, { quoted: quoted?.raw })
 }
 
 // ── Sub-commands ────────────────────────────────────────────
