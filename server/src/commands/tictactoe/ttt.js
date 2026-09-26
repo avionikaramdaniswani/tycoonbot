@@ -22,7 +22,7 @@ import {
   setChallenge,
   deleteChallenge
 } from '../../game/tictactoe/store.js'
-import { renderBoardToBuffer } from '../../game/tictactoe/render.js'
+import { renderBoardHtml } from '../../game/tictactoe/render-html.js'
 import config from '../../config/index.js'
 
 const PREFIX = config.bot.prefix
@@ -39,25 +39,23 @@ function mention(jid) {
 // ── AIRich renderers ────────────────────────────────────────
 
 async function sendBoard(sock, jid, game, statusText, quoted) {
-  const imageBuffer = await renderBoardToBuffer(game)
-
   const p1 = mention(game.players.X)
   const p2 = mention(game.players.O)
 
+  // Generate HTML game
+  const htmlGame = await renderBoardHtml(game)
+  
+  // Bungkus HTML menjadi Data URI agar bisa dibuka di dalam WhatsApp Webview
+  const dataUri = `data:text/html;charset=utf-8,${encodeURIComponent(htmlGame)}`
+
   const btn = new Button(sock)
-    .setImage(imageBuffer)
     .setBody(`🎮 *TIC TAC TOE*\n\n❌ ${p1}  vs  ⭕ ${p2}\n\n${statusText}`)
 
-  // Kalau game masih berjalan, tambahkan pilihan gerakan
+  // Tambahkan tombol Webview ajaib yang berisi HTML Murni!
+  btn.addOpenWebview('🕹️ Buka Game Board', dataUri)
+
+  // Tambahkan 1 tombol biasa untuk nyerah
   if (!game.winner) {
-    const moves = availableMoves(game)
-    
-    // Kembalikan jadi tombol pencet langsung (Quick Reply)
-    moves.forEach((pos) => {
-      btn.addReply(`Pilih ${pos}`, `${PREFIX}ttt ${pos}`)
-    })
-    
-    // Tambahkan 1 tombol biasa untuk nyerah
     btn.addReply('🏳️ Nyerah', `${PREFIX}ttt quit`)
   }
 
