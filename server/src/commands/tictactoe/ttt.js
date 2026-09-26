@@ -1,6 +1,8 @@
 import { createGame, AI_JID } from '../../game/tictactoe/engine.js'
 import { renderBoardHtml } from '../../game/tictactoe/render-html.js'
 import { jidNormalizedUser } from '@vanzxy/baileys'
+import { registerRoom } from '../../web/gameSocket.js'
+import { getName } from '../../bot/nameCache.js'
 
 import config from '../../config/index.js'
 
@@ -16,8 +18,8 @@ function deriveWsUrl() {
 }
 
 // Ambil daftar anggota grup buat lobby "Create Room" -> [{id, name}].
-// Tanpa store kontak, nama = nomor (fallback). Bot sendiri & penantang
-// dikeluarkan. Kalau bukan grup / gagal, kembalikan [] (lobby tampil kosong).
+// Nama diambil dari cache pushName (nama asli yang pernah kirim pesan);
+// kalau belum ada, fallback ke nomor. Bot & penantang dikeluarkan.
 async function getGroupMembers(sock, msg) {
   if (!msg.isGroup) return []
   try {
@@ -29,7 +31,7 @@ async function getGroupMembers(sock, msg) {
       const id = jidNormalizedUser(p.id)
       if (id === meJid || id === senderJid) continue
       const num = id.split('@')[0]
-      out.push({ id, name: num })
+      out.push({ id, name: getName(id) || num })
     }
     return out
   } catch {
@@ -47,6 +49,9 @@ async function sendBoard(sock, jid, game, quoted) {
   // Room id ditanam di payload pesan; semua yang buka pesan ini share room.
   const room = `ttt-${game.startedAt}-${Math.random().toString(36).slice(2, 8)}`
   const members = await getGroupMembers(sock, quoted)
+  // Daftarkan room ke server WS: chatJid + members dipakai buat fitur
+  // "tantang" (bot nge-tag target di chat grup ini).
+  registerRoom(room, { chatJid: jid, members })
   const rawHtml = await renderBoardHtml(game, { wsUrl, room, members })
 
   await sock.relayMessage(

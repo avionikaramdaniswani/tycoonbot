@@ -140,11 +140,11 @@ export async function renderBoardHtml(game, opts = {}) {
           <div class="overlay" id="modal">
             <div class="modal-card">
               <div class="modal-badge">!</div>
-              <div class="modal-t">Duel!</div>
+              <div class="modal-t" id="modal-t">Tantang</div>
               <div class="modal-s" id="modal-s">Kamu ditantang</div>
               <div class="modal-btns">
-                <button class="mbtn no" id="modal-no">Tolak</button>
-                <button class="mbtn yes" id="modal-yes">Terima</button>
+                <button class="mbtn no" id="modal-no">Batal</button>
+                <button class="mbtn yes" id="modal-yes">Tantang</button>
               </div>
             </div>
           </div>
@@ -164,6 +164,8 @@ export async function renderBoardHtml(game, opts = {}) {
             let gen = 0;
             let oppName = '';
             let pending = '';
+            let pendingTarget = '';
+            let pendingChallenge = '';
             let ws = null;
             let seat = null;
             let presence = { X: false, O: false };
@@ -182,9 +184,12 @@ export async function renderBoardHtml(game, opts = {}) {
               showLoading(t);
               setTimeout(function() { swapTo(id); hideLoading(); }, d || 780);
             }
-            function showModal(name) {
-              pending = name;
-              document.getElementById('modal-s').innerText = name + ' menantangmu ke Tic Tac Toe!';
+            function showModal(m) {
+              pending = (m && m.name) || '';
+              pendingTarget = (m && m.id) || '';
+              document.getElementById('modal-t').innerText = 'Tantang?';
+              document.getElementById('modal-s').innerText =
+                'Tantang ' + pending + '? Dia bakal di-tag di chat biar dapat notif & tinggal buka papan yang sama.';
               document.getElementById('modal').classList.add('show');
             }
             function hideModal() { document.getElementById('modal').classList.remove('show'); }
@@ -297,8 +302,9 @@ export async function renderBoardHtml(game, opts = {}) {
               document.getElementById('g-sub').innerText = 'Kamu (X) vs Bot (O)';
               goto('game', 'Menyiapkan papan', 720);
             }
-            function startOnline(name) {
+            function startOnline(name, targetId) {
               mode = 'online'; oppName = name || '';
+              pendingChallenge = targetId || '';
               gen++; aiThinking = false;
               board = ['','','','','','','','',''];
               turn = 'X'; winner = null; seat = null; presence = { X: false, O: false }; lastEvt = 'start';
@@ -326,12 +332,28 @@ export async function renderBoardHtml(game, opts = {}) {
                 lastEvt = 'msg';
                 let msg;
                 try { msg = JSON.parse(ev.data); } catch (e) { return; }
-                if (msg.type === 'welcome') { seat = msg.seat; }
+                if (msg.type === 'welcome') {
+                  seat = msg.seat;
+                  // Begitu tersambung & dapat kursi, minta server nge-tag lawan
+                  // yang kita pilih di chat grup (undangan cross-device).
+                  if (pendingChallenge) {
+                    wsSend({ type: 'challenge', targetId: pendingChallenge });
+                    pendingChallenge = '';
+                  }
+                }
                 else if (msg.type === 'state') {
                   const s = msg.state;
                   board = s.board.map(function(c) { return c || ''; });
                   turn = s.turn; winner = s.winner || null;
                   if (msg.presence) presence = msg.presence;
+                }
+                else if (msg.type === 'challenged') {
+                  oppName = msg.name || oppName;
+                  lastEvt = 'tag-terkirim';
+                  document.getElementById('g-sub').innerText = 'Undangan terkirim ke ' + (msg.name || 'lawan');
+                }
+                else if (msg.type === 'error') {
+                  lastEvt = 'err:' + (msg.message || '?');
                 }
                 render();
               };
@@ -363,7 +385,7 @@ export async function renderBoardHtml(game, opts = {}) {
                 row.innerHTML = '<div class="av"></div><div class="pn"></div><div class="vs">Tantang</div>';
                 row.querySelector('.av').innerText = (nm.trim().charAt(0) || '?').toUpperCase();
                 row.querySelector('.pn').innerText = nm;
-                row.addEventListener('pointerdown', function(e) { e.preventDefault(); showModal(nm); });
+                row.addEventListener('pointerdown', function(e) { e.preventDefault(); showModal(m); });
                 list.appendChild(row);
               });
             }
@@ -413,7 +435,7 @@ export async function renderBoardHtml(game, opts = {}) {
             });
             document.getElementById('board').addEventListener('pointerdown', boardTap);
             document.getElementById('modal-no').addEventListener('pointerdown', function(e){ e.preventDefault(); hideModal(); });
-            document.getElementById('modal-yes').addEventListener('pointerdown', function(e){ e.preventDefault(); var n = pending; hideModal(); startOnline(n); });
+            document.getElementById('modal-yes').addEventListener('pointerdown', function(e){ e.preventDefault(); var n = pending; var t = pendingTarget; hideModal(); startOnline(n, t); });
 
             render();
             setTimeout(function(){ swapTo('menu'); }, 2100);

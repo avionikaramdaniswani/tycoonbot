@@ -1,5 +1,7 @@
 import { WebSocketServer } from 'ws'
 import { logger } from '../lib/logger.js'
+import { bot } from '../bot/BotManager.js'
+import { getName } from '../bot/nameCache.js'
 
 /**
  * Server WebSocket "mentah" untuk Tic Tac Toe online (real-time multiplayer).
@@ -28,6 +30,22 @@ const WIN_LINES = [
 
 /** room id -> { state, seats:{X,O}, clients:Set } */
 const rooms = new Map()
+
+/**
+ * Info tambahan per-room yang ditanam server saat papan dikirim:
+ *   { chatJid, members:[{id,name}] }
+ * Dipakai buat fitur "tantang": webview kirim {type:'challenge',targetId},
+ * server nge-tag orang itu di chat lewat bot. Diisi oleh registerRoom().
+ */
+const roomMeta = new Map()
+
+export function registerRoom(roomId, meta) {
+  if (!roomId) return
+  roomMeta.set(roomId, {
+    chatJid: meta?.chatJid || '',
+    members: Array.isArray(meta?.members) ? meta.members : []
+  })
+}
 
 function freshState() {
   return { board: Array(9).fill(null), turn: 'X', winner: null, winLine: null }
@@ -63,6 +81,32 @@ function send(ws, obj) {
 function broadcastState(room) {
   const msg = { type: 'state', state: room.state, presence: presenceOf(room) }
   for (const ws of room.clients) send(ws, msg)
+}
+
+// Kirim tantangan: bot nge-tag target di chat grup. Webview nggak bisa
+// "memunculkan" apa pun di HP orang lain, jadi undangan dikirim sebagai
+// pesan WA (mention) — target dapat notif lalu buka papan yang sama.
+async function handleChallenge(ws, roomId, targetId) {
+  const meta = roomMeta.get(roomId)
+  if (!meta || !meta.chatJid) { send(ws, { type: 'error', message: 'room tanpa info chat' }); return }
+  if (!targetId) { send(ws, { type: 'error', message: 'target kosong' }); return }
+  if (!bot?.sock) { send(ws, { type: 'error', message: 'bot offline' }); return }
+
+  const known = meta.members.find((m) => m.id === targetId)
+  const name = (known && known.name) || getName(targetId) || targetId.split('@')[0]
+  const num = targetId.split('@')[0]
+
+  try {
+    await bot.sock.sendMessage(meta.chatJid, {
+      text: `@${num} kamu ditantang main *Tic Tac Toe*! Buka papan Tic Tac Toe di chat ini lalu masuk lewat *Create Room* buat mulai duel realtime.`,
+      mentions: [targetId]
+    })
+    send(ws, { type: 'challenged', name })
+    logger.info(`TTT: tantangan dikirim ke ${name} (${roomId}).`)
+  } catch (e) {
+    send(ws, { type: 'error', message: 'gagal kirim tantangan' })
+    logger.error(`TTT challenge gagal: ${e.message}`)
+  }
 }
 
 export function initGameSocket(httpServer) {
@@ -117,6 +161,10 @@ export function initGameSocket(httpServer) {
         if (ws._seat !== 'X' && ws._seat !== 'O') return // penonton nggak boleh reset
         room.state = freshState()
         broadcastState(room)
+      } else if (msg.type === 'challenge') {
+        // Tantang orang tertentu: bot nge-tag dia di chat grup biar dapat
+        // notifikasi & tinggal buka papan yang sama buat gabung.
+        handleChallenge(ws, roomId, msg.targetId)
       }
     })
 

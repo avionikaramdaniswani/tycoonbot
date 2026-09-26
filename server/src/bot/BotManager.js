@@ -14,6 +14,7 @@ import { logger, waLogger } from '../lib/logger.js'
 import { ensureDir, clearDir, normalizePhone, delay } from '../lib/utils.js'
 import { isMongoEnabled, getDb } from '../lib/db.js'
 import { serializeMessage } from './serialize.js'
+import { rememberName } from './nameCache.js'
 import { useMongoAuthState } from './authState.js'
 import { loadCommands } from '../commands/loader.js'
 import { createMessageHandler } from '../handlers/messageHandler.js'
@@ -164,7 +165,10 @@ export class BotManager extends EventEmitter {
     if (type !== 'notify') return
     for (const m of messages) {
       const msg = serializeMessage(this.sock, m)
-      if (!msg || msg.fromMe) continue
+      if (!msg) continue
+      // Simpan nama pengirim buat dipakai lobby game (lihat nameCache).
+      if (msg.sender && msg.pushName) rememberName(msg.sender, msg.pushName)
+      if (msg.fromMe) continue
       if (this.handleMessage) await this.handleMessage({ sock: this.sock, msg })
     }
   }
