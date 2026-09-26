@@ -87,40 +87,84 @@ export async function renderBoardHtml(game) {
           </div>
         </div>
 
-        <!-- Tambahkan Socket.IO Client -->
-        <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+        <!-- Logika Game Mandiri (Berjalan Langsung di WA) -->
         <script>
-          // Koneksi ke server bot (Ganti PUBLIC_URL di .env nanti kalau sudah di Pterodactyl)
-          const WS_URL = "${process.env.PUBLIC_URL || 'http://localhost:2397'}";
-          const gameId = "${game.id}"; // ID Chat
-          
-          const socket = io(WS_URL + '/game');
-          
-          socket.on('connect', () => {
-            console.log('Terhubung ke server bot!');
-          });
+          let board = ${JSON.stringify(game.board)};
+          let turn = '${game.turn}';
+          let isAi = ${game.isAi};
+          let winner = null;
 
-          // Kalau ada update papan dari server (misal musuh/AI jalan)
-          socket.on('boardUpdate', (newBoard) => {
+          function checkWinner(b) {
+            const lines = [
+              [0,1,2],[3,4,5],[6,7,8],
+              [0,3,6],[1,4,7],[2,5,8],
+              [0,4,8],[2,4,6]
+            ];
+            for (let line of lines) {
+              const [x,y,z] = line;
+              if (b[x] && b[x] === b[y] && b[x] === b[z]) return line;
+            }
+            return null;
+          }
+
+          function getBestMove(b) {
+            const empty = b.map((v, i) => v === '' ? i : -1).filter(v => v !== -1);
+            if (empty.length === 0) return -1;
+            // Simple random AI for now
+            return empty[Math.floor(Math.random() * empty.length)];
+          }
+
+          function render() {
             const boardEl = document.getElementById('board');
             let html = '';
-            newBoard.forEach((mark, i) => {
+            let winLine = checkWinner(board);
+            
+            board.forEach((mark, i) => {
               let cellClass = mark === 'X' ? 'x' : (mark === 'O' ? 'o' : '');
+              if (winLine && winLine.includes(i)) cellClass += ' win';
+              
               let content = mark ? mark : '<span class="number">' + (i + 1) + '</span>';
               html += '<div class="cell ' + cellClass + '" onclick="makeMove(' + i + ')">' + content + '</div>';
             });
             boardEl.innerHTML = html;
-          });
+          }
 
-          // Fungsi saat kotak dipencet
           window.makeMove = function(pos) {
-            // Kirim event ke server bot
-            socket.emit('ttt_move', { gameId, pos });
+            if (winner || board[pos] !== '') return;
             
-            // Beri efek loading sementara
-            const cells = document.querySelectorAll('.cell');
-            if(cells[pos] && !cells[pos].classList.contains('x') && !cells[pos].classList.contains('o')) {
-               cells[pos].innerHTML = '...';
+            // Player move
+            board[pos] = turn;
+            let winLine = checkWinner(board);
+            
+            if (winLine) {
+              winner = turn;
+            } else if (!board.includes('')) {
+              winner = 'SERI';
+            } else {
+              turn = turn === 'X' ? 'O' : 'X';
+              
+              // AI Move
+              if (isAi && turn === 'O') {
+                let aiMove = getBestMove(board);
+                if (aiMove !== -1) {
+                  board[aiMove] = 'O';
+                  winLine = checkWinner(board);
+                  if (winLine) {
+                    winner = 'O';
+                  } else if (!board.includes('')) {
+                    winner = 'SERI';
+                  }
+                  turn = 'X';
+                }
+              }
+            }
+            
+            render();
+            
+            if (winner) {
+              setTimeout(() => {
+                alert(winner === 'SERI' ? 'Gamenya SERI!' : 'Pemenangnya adalah: ' + winner + ' 🎉');
+              }, 300);
             }
           }
         </script>
