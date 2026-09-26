@@ -3,6 +3,7 @@ import config from './config/index.js'
 import { createApp } from './web/app.js'
 import { initSocket } from './web/socket.js'
 import { initGameSocket } from './web/gameSocket.js'
+import { startTunnel } from './lib/tunnel.js'
 import { bot } from './bot/BotManager.js'
 import { logger } from './lib/logger.js'
 import { ensureDir } from './lib/utils.js'
@@ -43,6 +44,10 @@ async function main() {
       logger.warn('PUBLIC_URL belum di-set — mode Online (multiplayer) nonaktif.')
     }
     logger.info('Buka dashboard lalu tekan START untuk menyalakan bot.')
+
+    // Kalau USE_CLOUDFLARED=1, buka tunnel publik (https/wss) otomatis.
+    // Ini akan menimpa config.publicUrl begitu tunnel siap.
+    startTunnel().catch((e) => logger.error(`Tunnel gagal: ${e?.message || e}`))
   })
 }
 
