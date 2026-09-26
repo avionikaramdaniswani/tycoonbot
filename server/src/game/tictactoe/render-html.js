@@ -1,20 +1,11 @@
-import { AI_JID } from './engine.js'
-
 /**
- * Render Tic Tac Toe sebagai mini-app multi-layar di dalam bubble WA:
- *   Splash -> Main Menu -> (Lobby / Game).
- * Semua UI + logika (AI minimax, mode Online via WebSocket) jalan client-side.
- * Transisi antar-layar pakai loading biar terasa hidup.
+ * Tic Tac Toe mini-app di dalam bubble WA.
+ * Splash -> Menu -> (Lobby -> modal tantangan -> Game) atau langsung Game (vs AI).
+ * Semua client-side. Gaya bold / neo-brutalist biar nggak keliatan template.
  *
- * opts:
- *   wsUrl   - endpoint WebSocket (wss://.../ttt) buat mode Online. '' = nonaktif.
- *   room    - id room yang ditanam di pesan; yang buka pesan sama = 1 room.
- *   members - [{id, name}] daftar peserta grup buat lobby Create Room.
+ * opts.members = [{id,name}] anggota grup buat lobby "Create Room".
  */
 export async function renderBoardHtml(game, opts = {}) {
-  const isAi = !!(game.players && (game.players.X === AI_JID || game.players.O === AI_JID))
-  const wsUrl = opts.wsUrl || ''
-  const room = opts.room || ''
   const members = Array.isArray(opts.members) ? opts.members : []
   const membersJson = JSON.stringify(members)
 
@@ -25,392 +16,300 @@ export async function renderBoardHtml(game, opts = {}) {
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
         <style>
-          * { box-sizing: border-box; }
-          html,body{margin:0;padding:0;background:#f3efe6;color:#2c2a26;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;-webkit-tap-highlight-color:transparent;}
-          body{padding:22px 16px;}
-          .app{width:100%;max-width:340px;margin:0 auto;position:relative;min-height:380px;}
-          .screen{display:none;animation:fade .32s ease;}
-          .screen.active{display:block;}
-          @keyframes fade{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
-          .brand{font-size:13px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#a89b83;text-align:center;}
-          .title{font-size:26px;font-weight:800;text-align:center;margin:2px 0 18px;}
-          .splash-inner{padding:52px 0;text-align:center;}
-          .logo{width:80px;height:80px;margin:0 auto 16px;border-radius:22px;background:#e7e0d1;display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:800;letter-spacing:.05em;color:#2c2a26;}
-          .splash-tag{color:#a89b83;font-size:13px;margin-top:16px;}
-          .menu{display:flex;flex-direction:column;gap:12px;margin-top:4px;}
-          .card{padding:16px;border-radius:16px;border:1px solid #d9d0bd;background:#fbf9f4;cursor:pointer;display:flex;align-items:center;gap:14px;transition:transform .08s ease,background .15s ease;}
-          .card:active{transform:scale(.98);background:#f3ede0;}
-          .card .ic{width:46px;height:46px;border-radius:13px;background:#e7e0d1;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#2c2a26;flex-shrink:0;}
-          .card .ch{font-size:16px;font-weight:700;}
-          .card .cs{font-size:12px;color:#a89b83;margin-top:2px;line-height:1.3;}
-          .section-head{display:flex;align-items:center;gap:10px;margin-bottom:16px;}
-          .section-head .brand{text-align:left;}
-          .back{width:36px;height:36px;border-radius:11px;border:1px solid #d9d0bd;background:#fbf9f4;color:#6b6353;font-size:20px;line-height:1;cursor:pointer;flex-shrink:0;}
-          .back:active{transform:scale(.95);}
-          .sub{font-size:12px;color:#a89b83;margin-top:2px;}
-          .list{display:flex;flex-direction:column;gap:8px;max-height:330px;overflow:auto;}
-          .player{padding:11px 13px;border-radius:12px;border:1px solid #d9d0bd;background:#fbf9f4;display:flex;align-items:center;gap:12px;cursor:pointer;transition:transform .08s ease;}
-          .player:active{transform:scale(.98);}
-          .avatar{width:36px;height:36px;border-radius:50%;background:#3a8891;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;flex-shrink:0;}
-          .pname{flex:1;font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-          .go{color:#a89b83;font-size:12px;flex-shrink:0;}
-          .note{background:#f7edd6;border:1px solid #ecdcb4;color:#8a7748;font-size:12px;padding:10px 12px;border-radius:11px;margin-bottom:12px;line-height:1.35;}
-          .empty{color:#a89b83;text-align:center;padding:26px 0;font-size:13px;line-height:1.5;}
-          .status{font-size:20px;font-weight:600;text-align:center;margin:2px 0 16px;min-height:26px;}
-          .board{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:10px;background:#e7e0d1;border-radius:18px;}
-          .cell{aspect-ratio:1/1;background:#fbf9f4;border-radius:12px;display:flex;justify-content:center;align-items:center;font-size:46px;font-weight:700;line-height:1;cursor:pointer;user-select:none;box-shadow:0 1px 0 rgba(0,0,0,.04);transition:background .15s ease,transform .08s ease;}
-          .cell.x{color:#d9694a;} .cell.o{color:#3a8891;}
-          .number{font-size:18px;font-weight:600;color:#cec4ae;}
-          .cell.win{background:#f2c14e;color:#2c2a26;}
-          .cell:active{transform:scale(.96);}
-          .controls{display:flex;gap:8px;margin-top:16px;}
-          .ctrl{flex:1;padding:12px 6px;border-radius:11px;border:1px solid #d9d0bd;background:#fbf9f4;color:#6b6353;font-size:13px;font-weight:600;font-family:inherit;cursor:pointer;transition:background .15s ease,transform .08s ease;}
-          .ctrl:active{transform:scale(.97);}
-          .loading{position:absolute;inset:-22px -16px;background:rgba(243,239,230,.9);display:none;align-items:center;justify-content:center;flex-direction:column;gap:14px;z-index:50;}
-          .loading.show{display:flex;}
-          .spinner{width:40px;height:40px;border-radius:50%;border:4px solid #e7e0d1;border-top-color:#3a8891;animation:spin .8s linear infinite;}
-          @keyframes spin{to{transform:rotate(360deg);}}
-          .loading-text{color:#6b6353;font-size:13px;font-weight:600;}
+          *{box-sizing:border-box;margin:0;padding:0;}
+          :root{--bg:#f4ede0;--ink:#161310;--card:#fffdf6;--x:#df5338;--o:#2f8f86;--acc:#f7c331;}
+          html,body{background:var(--bg);color:var(--ink);font-family:'Segoe UI',system-ui,-apple-system,Roboto,sans-serif;-webkit-tap-highlight-color:transparent;}
+          body{padding:20px 15px;}
+          .app{width:100%;max-width:342px;margin:0 auto;position:relative;min-height:410px;}
+          .screen{display:none;}
+          .screen.active{display:block;animation:pop .32s cubic-bezier(.2,.85,.3,1.3);}
+          @keyframes pop{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:none;}}
+          .tag{display:inline-block;background:var(--ink);color:var(--bg);font-size:10px;font-weight:800;letter-spacing:.2em;text-transform:uppercase;padding:5px 9px;}
+          .h1{font-size:31px;font-weight:900;letter-spacing:-.02em;line-height:.95;margin:11px 0 3px;text-transform:uppercase;}
+          .lead{color:#7c7161;font-size:13px;font-weight:500;margin-bottom:20px;}
+          .menu{display:flex;flex-direction:column;gap:14px;}
+          .card{background:var(--card);border:2.5px solid var(--ink);border-radius:15px;box-shadow:5px 5px 0 var(--ink);padding:15px;cursor:pointer;display:flex;align-items:center;gap:13px;transition:transform .09s,box-shadow .09s;}
+          .card:active{transform:translate(4px,4px);box-shadow:1px 1px 0 var(--ink);}
+          .ic{width:52px;height:52px;border-radius:12px;border:2.5px solid var(--ink);display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:900;flex-shrink:0;}
+          .ic.a{background:var(--x);color:#fff;}
+          .ic.b{background:var(--o);color:#fff;}
+          .ch{font-size:17px;font-weight:800;}
+          .cs{font-size:12px;color:#7c7161;margin-top:2px;line-height:1.3;}
+          .arw{margin-left:auto;font-size:22px;font-weight:900;}
+          .head{display:flex;align-items:center;gap:11px;margin-bottom:18px;}
+          .back{width:44px;height:44px;border-radius:11px;border:2.5px solid var(--ink);background:var(--card);box-shadow:3px 3px 0 var(--ink);font-size:22px;font-weight:900;line-height:1;cursor:pointer;flex-shrink:0;color:var(--ink);}
+          .back:active{transform:translate(3px,3px);box-shadow:0 0 0 var(--ink);}
+          .htitle{font-size:19px;font-weight:900;text-transform:uppercase;letter-spacing:-.01em;}
+          .hsub{font-size:12px;color:#7c7161;margin-top:1px;}
+          .list{display:flex;flex-direction:column;gap:10px;max-height:340px;overflow:auto;}
+          .player{background:var(--card);border:2.5px solid var(--ink);border-radius:13px;box-shadow:4px 4px 0 var(--ink);padding:11px 13px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:transform .09s,box-shadow .09s;}
+          .player:active{transform:translate(3px,3px);box-shadow:1px 1px 0 var(--ink);}
+          .av{width:40px;height:40px;border-radius:10px;border:2.5px solid var(--ink);background:var(--acc);display:flex;align-items:center;justify-content:center;font-weight:900;font-size:16px;flex-shrink:0;}
+          .pn{flex:1;font-size:14px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+          .vs{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:var(--x);}
+          .note{background:var(--acc);border:2.5px solid var(--ink);border-radius:11px;box-shadow:4px 4px 0 var(--ink);font-size:12px;font-weight:600;padding:11px 12px;margin-bottom:14px;line-height:1.35;}
+          .empty{text-align:center;padding:34px 14px;font-size:13px;font-weight:600;color:#7c7161;line-height:1.5;}
+          .status{display:inline-block;font-size:15px;font-weight:800;text-transform:uppercase;letter-spacing:.02em;background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:9px;margin-bottom:16px;}
+          .board{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
+          .cell{aspect-ratio:1/1;background:var(--card);border:2.5px solid var(--ink);border-radius:14px;box-shadow:4px 4px 0 var(--ink);display:flex;justify-content:center;align-items:center;font-size:48px;font-weight:900;line-height:1;cursor:pointer;user-select:none;transition:transform .07s,box-shadow .07s;}
+          .cell:active{transform:translate(3px,3px);box-shadow:1px 1px 0 var(--ink);}
+          .cell.x{color:var(--x);}
+          .cell.o{color:var(--o);}
+          .cell.win{background:var(--acc);}
+          .num{font-size:15px;font-weight:800;color:#d8cdb6;}
+          .ctrl{width:100%;margin-top:18px;padding:14px;border-radius:12px;border:2.5px solid var(--ink);background:var(--acc);box-shadow:5px 5px 0 var(--ink);font-size:14px;font-weight:900;text-transform:uppercase;letter-spacing:.05em;font-family:inherit;cursor:pointer;color:var(--ink);}
+          .ctrl:active{transform:translate(4px,4px);box-shadow:1px 1px 0 var(--ink);}
+          .splash{text-align:center;padding:60px 0;}
+          .logo{width:92px;height:92px;margin:0 auto;border-radius:20px;border:3px solid var(--ink);background:var(--card);box-shadow:6px 6px 0 var(--ink);display:flex;align-items:center;justify-content:center;font-size:38px;font-weight:900;}
+          .logo b:first-child{color:var(--x);}
+          .logo b:last-child{color:var(--o);}
+          .dots{display:flex;gap:7px;justify-content:center;margin-top:26px;}
+          .dots i{width:11px;height:11px;border-radius:50%;background:var(--ink);animation:bounce .6s infinite alternate;}
+          .dots i:nth-child(2){animation-delay:.15s;}
+          .dots i:nth-child(3){animation-delay:.3s;}
+          @keyframes bounce{to{transform:translateY(-9px);opacity:.4;}}
+          .overlay{position:absolute;inset:-20px -15px;background:rgba(244,237,224,.94);display:none;align-items:center;justify-content:center;flex-direction:column;gap:16px;z-index:40;padding:20px;}
+          .overlay.show{display:flex;}
+          .otext{font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;}
+          .modal-card{background:var(--card);border:3px solid var(--ink);border-radius:18px;box-shadow:7px 7px 0 var(--ink);padding:26px 22px;text-align:center;max-width:290px;animation:pop .3s cubic-bezier(.2,.85,.3,1.4);}
+          .modal-badge{width:66px;height:66px;margin:0 auto 14px;border-radius:16px;border:3px solid var(--ink);background:var(--x);color:#fff;display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:900;}
+          .modal-t{font-size:23px;font-weight:900;text-transform:uppercase;letter-spacing:-.01em;}
+          .modal-s{font-size:14px;color:#5f574a;font-weight:600;margin-top:7px;line-height:1.4;}
+          .modal-btns{display:flex;gap:11px;margin-top:22px;}
+          .mbtn{flex:1;padding:13px;border-radius:11px;border:2.5px solid var(--ink);font-size:14px;font-weight:900;text-transform:uppercase;font-family:inherit;cursor:pointer;box-shadow:4px 4px 0 var(--ink);color:var(--ink);}
+          .mbtn:active{transform:translate(3px,3px);box-shadow:1px 1px 0 var(--ink);}
+          .mbtn.yes{background:var(--o);color:#fff;}
+          .mbtn.no{background:var(--card);}
         </style>
       </head>
       <body>
         <div class="app">
-          <section class="screen active" id="screen-splash">
-            <div class="splash-inner">
-              <div class="logo">XO</div>
-              <div class="brand">Game Center</div>
-              <div class="title" style="margin-top:6px;">Tic Tac Toe</div>
-              <div class="spinner" style="margin:20px auto 0;"></div>
-              <div class="splash-tag">Menyiapkan permainan…</div>
+          <section class="screen active" id="s-splash">
+            <div class="splash">
+              <div class="logo"><b>X</b><b>O</b></div>
+              <div class="h1" style="margin-top:22px;">Tic Tac Toe</div>
+              <div class="lead" style="margin-bottom:0;">Game Center</div>
+              <div class="dots"><i></i><i></i><i></i></div>
             </div>
           </section>
-          <section class="screen" id="screen-menu">
-            <div class="brand">Tic Tac Toe</div>
-            <div class="title">Pilih Mode</div>
+          <section class="screen" id="s-menu">
+            <span class="tag">Game Center</span>
+            <div class="h1">Tic<br>Tac Toe</div>
+            <div class="lead">Pilih cara main kamu.</div>
             <div class="menu">
-              <div class="card" id="menu-room">
-                <div class="ic">VS</div>
-                <div><div class="ch">Create Room</div><div class="cs">Tantang pemain lain di grup (realtime)</div></div>
+              <div class="card" id="m-room">
+                <div class="ic a">VS</div>
+                <div><div class="ch">Create Room</div><div class="cs">Tantang teman di grup</div></div>
+                <div class="arw">›</div>
               </div>
-              <div class="card" id="menu-ai">
-                <div class="ic">AI</div>
-                <div><div class="ch">vs AI</div><div class="cs">Lawan bot unbeatable</div></div>
+              <div class="card" id="m-ai">
+                <div class="ic b">AI</div>
+                <div><div class="ch">Vs AI</div><div class="cs">Lawan bot unbeatable</div></div>
+                <div class="arw">›</div>
               </div>
             </div>
           </section>
-          <section class="screen" id="screen-lobby">
-            <div class="section-head">
-              <button class="back" id="lobby-back">‹</button>
-              <div><div class="brand">Create Room</div><div class="sub">Pilih lawanmu</div></div>
+          <section class="screen" id="s-lobby">
+            <div class="head">
+              <button class="back" id="l-back">‹</button>
+              <div><div class="htitle">Create Room</div><div class="hsub">Pilih lawanmu</div></div>
             </div>
-            <div id="lobby-note"></div>
-            <div class="list" id="player-list"></div>
+            <div id="l-note"></div>
+            <div class="list" id="p-list"></div>
           </section>
-          <section class="screen" id="screen-game">
-            <div class="section-head">
-              <button class="back" id="game-back">‹</button>
-              <div class="brand" id="game-mode-label">vs AI</div>
+          <section class="screen" id="s-game">
+            <div class="head">
+              <button class="back" id="g-back">‹</button>
+              <div><div class="htitle" id="g-label">Vs AI</div><div class="hsub" id="g-sub">Papan permainan</div></div>
             </div>
             <div class="status" id="status">Giliran X</div>
             <div class="board" id="board"></div>
-            <div class="controls">
-              <button class="ctrl" id="btn-new">Ulang</button>
-            </div>
+            <button class="ctrl" id="btn-new">Main Lagi</button>
           </section>
-          <div class="loading" id="loading"><div class="spinner"></div><div class="loading-text" id="loading-text">Memuat…</div></div>
+          <div class="overlay" id="loading"><div class="dots"><i></i><i></i><i></i></div><div class="otext" id="loading-text">Memuat</div></div>
+          <div class="overlay" id="modal">
+            <div class="modal-card">
+              <div class="modal-badge">!</div>
+              <div class="modal-t">Duel!</div>
+              <div class="modal-s" id="modal-s">Kamu ditantang</div>
+              <div class="modal-btns">
+                <button class="mbtn no" id="modal-no">Tolak</button>
+                <button class="mbtn yes" id="modal-yes">Terima</button>
+              </div>
+            </div>
+          </div>
         </div>
         <script>
           document.addEventListener('DOMContentLoaded', function() {
             const MEMBERS = ${membersJson};
-            const WS_URL = ${JSON.stringify(wsUrl)};
-            const ROOM = ${JSON.stringify(room)};
-            const ONLINE_OK = !!(WS_URL && ROOM);
 
-            let board = ['', '', '', '', '', '', '', '', ''];
+            let board = ['','','','','','','','',''];
             let turn = 'X';
-            let isAi = true;
             let mode = 'ai';
             let winner = null;
             let aiThinking = false;
             let gen = 0;
-            let ws = null;
-            let seat = null;
-            let presence = { X: false, O: false };
-            let opponentName = '';
-
-            // ── Navigasi antar-layar ──────────────────────────────
-            function swapTo(screen) {
+            let oppName = '';
+            let pending = '';
+            function swapTo(id) {
               const list = document.querySelectorAll('.screen');
               for (let i = 0; i < list.length; i++) list[i].classList.remove('active');
-              document.getElementById('screen-' + screen).classList.add('active');
+              document.getElementById('s-' + id).classList.add('active');
             }
-            function showLoading(text) {
-              document.getElementById('loading-text').innerText = text || 'Memuat…';
+            function showLoading(t) {
+              document.getElementById('loading-text').innerText = t || 'Memuat';
               document.getElementById('loading').classList.add('show');
             }
-            function hideLoading() {
-              document.getElementById('loading').classList.remove('show');
+            function hideLoading() { document.getElementById('loading').classList.remove('show'); }
+            function goto(id, t, d) {
+              showLoading(t);
+              setTimeout(function() { swapTo(id); hideLoading(); }, d || 780);
             }
-            // Pindah layar dengan loading dulu biar terasa realistis.
-            function goto(screen, text, delay) {
-              showLoading(text);
-              setTimeout(function() {
-                swapTo(screen);
-                hideLoading();
-              }, delay || 850);
+            function showModal(name) {
+              pending = name;
+              document.getElementById('modal-s').innerText = name + ' menantangmu ke Tic Tac Toe!';
+              document.getElementById('modal').classList.add('show');
             }
-            // ── Logika game ───────────────────────────────────────
+            function hideModal() { document.getElementById('modal').classList.remove('show'); }
             function checkWinner(b) {
-              const lines = [
-                [0,1,2],[3,4,5],[6,7,8],
-                [0,3,6],[1,4,7],[2,5,8],
-                [0,4,8],[2,4,6]
-              ];
-              for (let line of lines) {
-                const [x,y,z] = line;
-                if (b[x] && b[x] === b[y] && b[x] === b[z]) return line;
-              }
+              const L = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+              for (let ln of L) { const x = ln[0], y = ln[1], z = ln[2]; if (b[x] && b[x] === b[y] && b[x] === b[z]) return ln; }
               return null;
             }
-
-            // AI unbeatable (minimax). AI = 'O', pemain = 'X'.
             function getBestMove(b) {
-              function winnerOf(bd) {
+              function won(bd) {
                 const L = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
-                for (const [x,y,z] of L) {
-                  if (bd[x] && bd[x] === bd[y] && bd[x] === bd[z]) return bd[x];
-                }
+                for (const ln of L) { if (bd[ln[0]] && bd[ln[0]] === bd[ln[1]] && bd[ln[0]] === bd[ln[2]]) return bd[ln[0]]; }
                 return null;
               }
-              function mm(bd, isMax, depth) {
-                const w = winnerOf(bd);
-                if (w === 'O') return 10 - depth;
-                if (w === 'X') return depth - 10;
+              function mm(bd, isMax, d) {
+                const w = won(bd);
+                if (w === 'O') return 10 - d;
+                if (w === 'X') return d - 10;
                 if (!bd.includes('')) return 0;
-                if (isMax) {
-                  let best = -Infinity;
-                  for (let i = 0; i < 9; i++) {
-                    if (bd[i] !== '') continue;
-                    bd[i] = 'O'; best = Math.max(best, mm(bd, false, depth + 1)); bd[i] = '';
-                  }
-                  return best;
-                } else {
-                  let best = Infinity;
-                  for (let i = 0; i < 9; i++) {
-                    if (bd[i] !== '') continue;
-                    bd[i] = 'X'; best = Math.min(best, mm(bd, true, depth + 1)); bd[i] = '';
-                  }
-                  return best;
+                let best = isMax ? -Infinity : Infinity;
+                for (let i = 0; i < 9; i++) {
+                  if (bd[i] !== '') continue;
+                  bd[i] = isMax ? 'O' : 'X';
+                  const s = mm(bd, !isMax, d + 1);
+                  bd[i] = '';
+                  best = isMax ? Math.max(best, s) : Math.min(best, s);
                 }
+                return best;
               }
-              let bestScore = -Infinity, bestMove = -1;
+              let bs = -Infinity, bm = -1;
               for (let i = 0; i < 9; i++) {
                 if (b[i] !== '') continue;
                 b[i] = 'O'; const s = mm(b, false, 1); b[i] = '';
-                if (s > bestScore) { bestScore = s; bestMove = i; }
+                if (s > bs) { bs = s; bm = i; }
               }
-              return bestMove;
+              return bm;
+            }
+            function statusText() {
+              if (winner) {
+                if (winner === 'SERI') return 'Seri!';
+                if (mode === 'ai') return winner === 'O' ? 'AI Menang' : 'Kamu Menang';
+                return (winner === 'X' ? 'Kamu' : oppName) + ' Menang';
+              }
+              if (mode === 'ai') return turn === 'X' ? 'Giliranmu' : 'AI Mikir';
+              return turn === 'X' ? 'Giliran Kamu' : 'Giliran ' + oppName;
             }
             function render() {
-              const boardEl = document.getElementById('board');
-              let html = '';
-              let winLine = checkWinner(board);
-              board.forEach(function(mark, i) {
-                let cls = mark === 'X' ? 'x' : (mark === 'O' ? 'o' : '');
-                if (winLine && winLine.includes(i)) cls += ' win';
-                let content = mark ? mark : '<span class="number">' + (i + 1) + '</span>';
-                html += '<div class="cell ' + cls + '" data-index="' + i + '">' + content + '</div>';
+              const el = document.getElementById('board');
+              const wl = checkWinner(board);
+              let h = '';
+              board.forEach(function(m, i) {
+                let c = m === 'X' ? 'x' : (m === 'O' ? 'o' : '');
+                if (wl && wl.indexOf(i) > -1) c += ' win';
+                const inner = m ? m : '<span class="num">' + (i + 1) + '</span>';
+                h += '<div class="cell ' + c + '" data-i="' + i + '">' + inner + '</div>';
               });
-              boardEl.innerHTML = html;
-
-              const statusEl = document.getElementById('status');
-              if (mode === 'online') { statusEl.innerText = onlineStatusText(); return; }
-              if (winner) {
-                if (winner === 'SERI') statusEl.innerText = 'Seri';
-                else if (mode === 'ai') statusEl.innerText = (winner === 'O') ? 'AI menang' : 'Kamu menang';
-                else statusEl.innerText = 'Pemain ' + winner + ' menang';
-              } else {
-                statusEl.innerText = 'Giliran ' + turn;
-              }
+              el.innerHTML = h;
+              document.getElementById('status').innerText = statusText();
             }
-
-            function onlineStatusText() {
-              if (!ONLINE_OK) return 'Server realtime belum aktif';
-              if (!ws || ws.readyState !== 1) return 'Menyambungkan…';
-              if (seat === 'spec') {
-                if (winner) return winner === 'SERI' ? 'Seri' : 'Pemain ' + winner + ' menang';
-                return 'Nonton • Giliran ' + turn;
-              }
-              if (!seat) return 'Menyambungkan…';
-              if (!presence.X || !presence.O) return 'Menunggu lawan…';
-              if (winner) {
-                if (winner === 'SERI') return 'Seri';
-                return winner === seat ? 'Kamu menang' : 'Lawan menang';
-              }
-              return (turn === seat ? 'Giliranmu' : 'Giliran lawan') + ' • Kamu ' + seat;
-            }
-
             function resetBoard() {
               gen++; aiThinking = false;
-              board = ['', '', '', '', '', '', '', '', ''];
+              board = ['','','','','','','','',''];
               turn = 'X'; winner = null;
               render();
             }
-            // ── Aksi navigasi / mulai mode ────────────────────────
-            function openMenu() {
-              if (mode === 'online') closeWs();
-              gen++; aiThinking = false;
-              goto('menu', 'Memuat menu…', 650);
-            }
-            function openLobby() {
-              buildPlayerList();
-              goto('lobby', 'Membuka lobby…', 850);
-            }
+            function openMenu() { gen++; aiThinking = false; goto('menu', 'Memuat', 600); }
+            function openLobby() { buildList(); goto('lobby', 'Membuka lobby', 720); }
             function startAi() {
-              mode = 'ai'; isAi = true;
-              gen++; aiThinking = false;
-              board = ['', '', '', '', '', '', '', '', ''];
-              turn = 'X'; winner = null;
-              document.getElementById('game-mode-label').innerText = 'vs AI';
-              render();
-              goto('game', 'Menyiapkan papan…', 850);
+              mode = 'ai'; resetBoard();
+              document.getElementById('g-label').innerText = 'Vs AI';
+              document.getElementById('g-sub').innerText = 'Kamu (X) vs Bot (O)';
+              goto('game', 'Menyiapkan papan', 720);
             }
-            function startOnline(name) {
-              mode = 'online'; isAi = false; opponentName = name || '';
-              gen++; aiThinking = false;
-              board = ['', '', '', '', '', '', '', '', ''];
-              turn = 'X'; winner = null; seat = null; presence = { X: false, O: false };
-              document.getElementById('game-mode-label').innerText = name ? ('vs ' + name) : 'Online';
-              render();
-              goto('game', name ? ('Menantang ' + name + '…') : 'Menyambungkan…', 900);
-              connectWs();
+            function startLocal(name) {
+              mode = 'local'; oppName = name || 'Lawan'; resetBoard();
+              document.getElementById('g-label').innerText = 'Duel';
+              document.getElementById('g-sub').innerText = 'Kamu (X) vs ' + oppName + ' (O)';
+              goto('game', 'Menyiapkan duel', 760);
             }
-
-            function buildPlayerList() {
-              const note = document.getElementById('lobby-note');
-              note.innerHTML = ONLINE_OK ? '' :
-                '<div class="note">Server realtime belum aktif, jadi tantangan belum bisa dikirim. Set PUBLIC_URL / tunnel dulu ya.</div>';
-              const list = document.getElementById('player-list');
+            function buildList() {
+              const note = document.getElementById('l-note');
+              note.innerHTML = '<div class="note">Mode duel = gantian pegang HP (pass and play). Realtime beda HP belum didukung WhatsApp.</div>';
+              const list = document.getElementById('p-list');
               if (!MEMBERS.length) {
-                list.innerHTML = '<div class="empty">Daftar pemain tidak tersedia.<br>Buka papan ini di dalam grup.</div>';
+                list.innerHTML = '<div class="empty">Belum ada anggota grup yang bisa ditantang.<br>Buka papan ini di dalam grup.</div>';
                 return;
               }
               list.innerHTML = '';
               MEMBERS.forEach(function(m) {
-                const nm = m.name || m.id || 'Pemain';
+                const nm = (m.name || m.id || 'Pemain').toString();
                 const row = document.createElement('div');
                 row.className = 'player';
-                row.innerHTML = '<div class="avatar"></div><div class="pname"></div><div class="go">Tantang ›</div>';
-                row.querySelector('.avatar').innerText = nm.trim().charAt(0).toUpperCase() || '?';
-                row.querySelector('.pname').innerText = nm;
-                row.addEventListener('pointerdown', function(e) { e.preventDefault(); startOnline(nm); });
+                row.innerHTML = '<div class="av"></div><div class="pn"></div><div class="vs">Tantang</div>';
+                row.querySelector('.av').innerText = (nm.trim().charAt(0) || '?').toUpperCase();
+                row.querySelector('.pn').innerText = nm;
+                row.addEventListener('pointerdown', function(e) { e.preventDefault(); showModal(nm); });
                 list.appendChild(row);
               });
             }
-            // ── WebSocket multiplayer (server sebagai wasit) ──────
-            function connectWs() {
-              if (!ONLINE_OK) { render(); return; }
-              closeWs();
-              const myGen = gen;
-              try {
-                ws = new WebSocket(WS_URL + '?room=' + encodeURIComponent(ROOM));
-              } catch (e) { render(); return; }
-              ws.onopen = function() { render(); };
-              ws.onmessage = function(ev) {
-                if (mode !== 'online' || myGen !== gen) return;
-                let msg;
-                try { msg = JSON.parse(ev.data); } catch (e) { return; }
-                if (msg.type === 'welcome') {
-                  seat = msg.seat;
-                } else if (msg.type === 'state') {
-                  const s = msg.state;
-                  board = s.board.map(function(c) { return c || ''; });
-                  turn = s.turn;
-                  winner = s.winner || null;
-                  if (msg.presence) presence = msg.presence;
-                }
-                render();
-              };
-              ws.onclose = function() { if (mode === 'online' && myGen === gen) render(); };
-              ws.onerror = function() {};
-            }
-            function closeWs() {
-              if (ws) { try { ws.onclose = null; ws.close(); } catch (e) {} ws = null; }
-            }
-            function wsSend(obj) {
-              if (ws && ws.readyState === 1) { try { ws.send(JSON.stringify(obj)); } catch (e) {} }
-            }
-
-            // ── Tap di papan ──────────────────────────────────────
             function boardTap(e) {
               const cell = e.target.closest('.cell');
               if (!cell) return;
               e.preventDefault();
-              if (aiThinking) return;
-              const pos = parseInt(cell.getAttribute('data-index'));
-              if (isNaN(pos)) return;
-
-              // Online: server yang jadi wasit, cukup kirim langkah.
-              if (mode === 'online') {
-                if (!ONLINE_OK || seat === 'spec' || !seat) return;
-                if (winner || turn !== seat || board[pos] !== '') return;
-                if (!presence.X || !presence.O) return;
-                wsSend({ type: 'move', pos: pos });
-                return;
-              }
-              // Mode AI / lokal: papan dikelola di sisi client.
-              if (winner || board[pos] !== '') return;
+              if (aiThinking || winner) return;
+              const pos = parseInt(cell.getAttribute('data-i'), 10);
+              if (isNaN(pos) || board[pos] !== '') return;
               board[pos] = turn;
-              let line = checkWinner(board);
-              if (line) { winner = turn; render(); return; }
+              if (checkWinner(board)) { winner = turn; render(); return; }
               if (!board.includes('')) { winner = 'SERI'; render(); return; }
-
-              if (mode === 'ai' && turn === 'X') {
-                turn = 'O';
-                render();
-                // AI "mikir" sebentar biar terasa hidup.
+              if (mode === 'ai') {
+                turn = 'O'; render();
                 aiThinking = true;
-                const myGen = gen;
+                const g = gen;
                 setTimeout(function() {
-                  if (myGen !== gen || winner) { aiThinking = false; return; }
-                  const move = getBestMove(board.slice());
-                  if (move >= 0) board[move] = 'O';
-                  let l2 = checkWinner(board);
-                  if (l2) winner = 'O';
+                  if (g !== gen || winner) { aiThinking = false; return; }
+                  const mv = getBestMove(board.slice());
+                  if (mv >= 0) board[mv] = 'O';
+                  if (checkWinner(board)) winner = 'O';
                   else if (!board.includes('')) winner = 'SERI';
                   else turn = 'X';
-                  aiThinking = false;
-                  render();
-                }, 500 + Math.random() * 500);
+                  aiThinking = false; render();
+                }, 480 + Math.random() * 520);
               } else {
-                turn = (turn === 'X') ? 'O' : 'X';
-                render();
+                turn = turn === 'X' ? 'O' : 'X'; render();
               }
             }
-
-            // ── Wiring tombol & event ─────────────────────────────
-            document.getElementById('menu-room').addEventListener('pointerdown', function(e) { e.preventDefault(); openLobby(); });
-            document.getElementById('menu-ai').addEventListener('pointerdown', function(e) { e.preventDefault(); startAi(); });
-            document.getElementById('lobby-back').addEventListener('pointerdown', function(e) { e.preventDefault(); openMenu(); });
-            document.getElementById('game-back').addEventListener('pointerdown', function(e) { e.preventDefault(); openMenu(); });
-            document.getElementById('btn-new').addEventListener('pointerdown', function(e) {
-              e.preventDefault();
-              if (mode === 'online') {
-                if (seat && seat !== 'spec') wsSend({ type: 'reset' });
-              } else {
-                resetBoard();
-              }
-            });
+            document.getElementById('m-room').addEventListener('pointerdown', function(e){ e.preventDefault(); openLobby(); });
+            document.getElementById('m-ai').addEventListener('pointerdown', function(e){ e.preventDefault(); startAi(); });
+            document.getElementById('l-back').addEventListener('pointerdown', function(e){ e.preventDefault(); openMenu(); });
+            document.getElementById('g-back').addEventListener('pointerdown', function(e){ e.preventDefault(); openMenu(); });
+            document.getElementById('btn-new').addEventListener('pointerdown', function(e){ e.preventDefault(); resetBoard(); });
             document.getElementById('board').addEventListener('pointerdown', boardTap);
+            document.getElementById('modal-no').addEventListener('pointerdown', function(e){ e.preventDefault(); hideModal(); });
+            document.getElementById('modal-yes').addEventListener('pointerdown', function(e){ e.preventDefault(); var n = pending; hideModal(); startLocal(n); });
 
-            // ── Splash → Main Menu otomatis ───────────────────────
             render();
-            setTimeout(function() { swapTo('menu'); }, 2200);
+            setTimeout(function(){ swapTo('menu'); }, 2100);
           });
         </script>
       </body>
     </html>
-  `
+`
 
   return html
 }
