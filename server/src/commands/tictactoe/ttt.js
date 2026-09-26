@@ -88,40 +88,64 @@ bot.on('webview_ttt_move', async ({ gameId, pos, socket }) => {
   }
 })
 
-// ── AIRich renderers ────────────────────────────────────────
+// ── HTML Primitive Renderer (Anya v5 Method) ────────────────────────
 
 async function sendBoard(sock, jid, game, statusText, quoted) {
-  const p1 = mention(game.players.X)
-  const p2 = mention(game.players.O)
-
-  // Render HTML dan Gambar
+  // Render murni HTML dengan WebSockets
   const rawHtml = await renderBoardHtml(game)
-  const imageBuffer = await renderBoardImage(game)
-  
-  let text = `🎮 *TIC TAC TOE*\n\n❌ ${p1}  vs  ⭕ ${p2}\n\n${statusText}`
 
-  const msg = new AIRich(sock)
-
-  // 1. Tambahkan Gambar (HTML yg sudah di-render)
-  msg.addInlineImage(imageBuffer, { text: "Tic Tac Toe Board" })
-
-  // 2. Teks Status
-  msg.addText(text, { header: "Status Game" })
-
-  // 3. (Opsional/Gaya TikTok) Tampilkan Payload Code
-  msg.addCode('html', rawHtml)
-
-  // 4. Tombol Langkah via Suggestion Chips
-  if (!game.winner) {
-    game.board.forEach((mark, i) => {
-      if (!mark) {
-        msg.addSuggest(`${PREFIX}ttt ${i + 1}`)
+  // Bikin payload ajaib (reverse-engineered dari Meta AI)
+  await sock.relayMessage(
+    jid,
+    {
+      messageContextInfo: {
+        deviceListMetadata: {},
+        deviceListMetadataVersion: 2,
+        botMetadata: {}
+      },
+      botForwardedMessage: {
+        message: {
+          richResponseMessage: {
+            messageType: 1,
+            submessages: [
+              {
+                messageType: 2,
+                messageText: `🎮 *TIC TAC TOE*\n\n❌ ${mention(game.players.X)}  vs  ⭕ ${mention(game.players.O)}\n\n${statusText}`
+              }
+            ],
+            unifiedResponse: {
+              data: Buffer.from(
+                JSON.stringify({
+                  response_id: `ttt-${Date.now()}`,
+                  sections: [
+                    {
+                      view_model: {
+                        primitive: {
+                          __typename: 'GenAIaeacdsnwHtmlPrimitive',
+                          payload: rawHtml,
+                          trusted_sources: []
+                        },
+                        __typename: 'GenAISingleLayoutViewModel'
+                      }
+                    }
+                  ]
+                })
+              ).toString('base64')
+            },
+            contextInfo: {
+              forwardingScore: 1,
+              isForwarded: true,
+              forwardedAiBotMessageInfo: {
+                botJid: '867051314767696@bot'
+              },
+              forwardOrigin: 4
+            }
+          }
+        }
       }
-    })
-    msg.addSuggest(`${PREFIX}ttt quit`)
-  }
-
-  await msg.send(jid, { quoted: quoted?.raw })
+    },
+    { quoted: quoted?.raw }
+  )
 }
 
 async function sendRich(sock, jid, heading, text, quoted, suggests) {
