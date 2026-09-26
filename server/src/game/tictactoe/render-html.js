@@ -30,114 +30,111 @@ export async function renderBoardHtml(game) {
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
         <style>
+          * { box-sizing: border-box; }
           html, body {
             margin: 0;
             padding: 0;
-            background: linear-gradient(135deg, #1a1c29 0%, #2a2d42 100%);
-            color: white;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f3efe6;
+            color: #2c2a26;
+            font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
             -webkit-tap-highlight-color: transparent;
           }
-          body {
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            padding: 15px;
-            box-sizing: border-box;
+          body { padding: 22px 16px; }
+          .wrap {
+            width: 100%;
+            max-width: 340px;
+            margin: 0 auto;
+          }
+          .title {
+            font-size: 15px;
+            font-weight: 700;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            color: #a89b83;
+            text-align: center;
+            margin-bottom: 4px;
           }
           .status {
-            font-size: 24px;
-            font-weight: bold;
-            margin-bottom: 20px;
+            font-size: 20px;
+            font-weight: 600;
             text-align: center;
-            text-shadow: 0 2px 5px rgba(0,0,0,0.5);
+            margin-bottom: 16px;
+            min-height: 26px;
           }
-          .board-container {
-            width: min(100%, 400px);
-            aspect-ratio: 1;
-            background: rgba(255, 255, 255, 0.05);
-            padding: 15px;
-            border-radius: 20px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5), inset 0 2px 5px rgba(255,255,255,0.1);
-            border: 1px solid rgba(255,255,255,0.1);
-            box-sizing: border-box;
-          }
-          .grid {
+          .board {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
-            grid-template-rows: repeat(3, 1fr);
             gap: 10px;
-            width: 100%;
-            height: 100%;
+            padding: 10px;
+            background: #e7e0d1;
+            border-radius: 18px;
           }
           .cell {
-            background: #1f2233;
+            aspect-ratio: 1 / 1;
+            background: #fbf9f4;
             border-radius: 12px;
             display: flex;
             justify-content: center;
             align-items: center;
-            font-size: clamp(30px, 12vw, 60px);
-            font-weight: bold;
-            box-shadow: inset 0 4px 5px rgba(0,0,0,0.4), 0 2px 0 rgba(255,255,255,0.05);
-            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+            font-size: 46px;
+            font-weight: 700;
+            line-height: 1;
             cursor: pointer;
             user-select: none;
+            box-shadow: 0 1px 0 rgba(0,0,0,0.04);
+            transition: background .15s ease, transform .08s ease;
           }
-          .cell.x { color: #f7768e; }
-          .cell.o { color: #7aa2f7; }
+          .cell.x { color: #d9694a; }
+          .cell.o { color: #3a8891; }
           .number {
-            font-size: clamp(16px, 6vw, 30px);
-            color: rgba(255,255,255,0.1);
-            text-shadow: none;
+            font-size: 18px;
+            font-weight: 600;
+            color: #cec4ae;
           }
           .cell.win {
-            background: #e0af68;
-            color: #1a1c29;
-            box-shadow: 0 0 20px rgba(224, 175, 104, 0.5);
+            background: #f2c14e;
+            color: #2c2a26;
           }
-          .cell:active { transform: scale(0.95); }
+          .cell:active { transform: scale(0.96); }
           .controls {
             display: flex;
-            gap: 10px;
-            margin-top: 20px;
-            width: min(100%, 400px);
+            gap: 8px;
+            margin-top: 16px;
           }
           .ctrl {
             flex: 1;
-            padding: 12px 8px;
-            border-radius: 12px;
-            border: 1px solid rgba(255,255,255,0.12);
-            background: rgba(255,255,255,0.05);
-            color: #fff;
-            font-size: 14px;
+            padding: 11px 6px;
+            border-radius: 10px;
+            border: 1px solid #d9d0bd;
+            background: #fbf9f4;
+            color: #6b6353;
+            font-size: 13px;
             font-weight: 600;
             font-family: inherit;
             cursor: pointer;
             -webkit-tap-highlight-color: transparent;
-            transition: transform .1s ease, background .15s ease;
+            transition: background .15s ease, color .15s ease, transform .08s ease;
           }
           .ctrl.active {
-            background: linear-gradient(135deg, #7aa2f7, #bb9af7);
-            border-color: transparent;
-            color: #1a1c29;
+            background: #2c2a26;
+            border-color: #2c2a26;
+            color: #f3efe6;
           }
-          .ctrl:active { transform: scale(0.96); }
+          .ctrl:active { transform: scale(0.97); }
         </style>
       </head>
       <body>
-        <div class="status" id="status">Giliran: X</div>
-        <div class="board-container">
-          <div class="grid" id="board">
+        <div class="wrap">
+          <div class="title">Tic Tac Toe</div>
+          <div class="status" id="status">Giliran X</div>
+          <div class="board" id="board">
             ${game.board.map((mark, i) => getCell(mark, i)).join('')}
           </div>
-        </div>
-
-        <div class="controls">
-          <button class="ctrl" data-mode="ai" id="btn-ai">🤖 vs AI</button>
-          <button class="ctrl" data-mode="pvp" id="btn-pvp">👥 2 Player</button>
-          <button class="ctrl" id="btn-new">♻️ New</button>
+          <div class="controls">
+            <button class="ctrl" data-mode="ai" id="btn-ai">vs AI</button>
+            <button class="ctrl" data-mode="pvp" id="btn-pvp">2 Pemain</button>
+            <button class="ctrl" id="btn-new">Reset</button>
+          </div>
         </div>
 
         <script>
@@ -147,6 +144,8 @@ export async function renderBoardHtml(game) {
             let isAi = ${isAi};
             let mode = isAi ? 'ai' : 'pvp';
             let winner = null;
+            let aiThinking = false;
+            let gen = 0;
 
             function checkWinner(b) {
               const lines = [
@@ -223,19 +222,20 @@ export async function renderBoardHtml(game) {
               const statusEl = document.getElementById('status');
               if (winner) {
                 if (winner === 'SERI') {
-                  statusEl.innerText = 'SERI! 🤝';
+                  statusEl.innerText = 'Seri';
+                } else if (mode === 'ai') {
+                  statusEl.innerText = (winner === 'O') ? 'AI menang' : 'Kamu menang';
                 } else {
-                  let who = winner;
-                  if (mode === 'ai') who = (winner === 'O') ? 'AI 🤖' : 'Kamu';
-                  statusEl.innerText = 'Pemenang: ' + who + ' 🎉';
+                  statusEl.innerText = 'Pemain ' + winner + ' menang';
                 }
               } else {
-                const modeLabel = mode === 'ai' ? 'vs AI 🤖' : '2 Player 👥';
-                statusEl.innerText = modeLabel + ' • Giliran: ' + turn;
+                statusEl.innerText = 'Giliran ' + turn;
               }
             }
 
             function resetBoard() {
+              gen++;
+              aiThinking = false;
               board = ['', '', '', '', '', '', '', '', ''];
               turn = 'X';
               winner = null;
@@ -260,37 +260,54 @@ export async function renderBoardHtml(game) {
               if (!cell) return;
               e.preventDefault();
 
+              // Kunci input selama AI lagi "mikir".
+              if (aiThinking) return;
+
               const pos = parseInt(cell.getAttribute('data-index'));
               if (isNaN(pos) || winner || board[pos] !== '') return;
-              
-              // Player move
+
+              // Langkah pemain.
               board[pos] = turn;
               let winLine = checkWinner(board);
-              
+
               if (winLine) {
                 winner = turn;
-              } else if (!board.includes('')) {
+                render();
+                return;
+              }
+              if (!board.includes('')) {
                 winner = 'SERI';
-              } else {
-                turn = turn === 'X' ? 'O' : 'X';
-                
-                // AI Move
-                if (isAi && turn === 'O') {
-                  let aiMove = getBestMove(board);
+                render();
+                return;
+              }
+
+              turn = turn === 'X' ? 'O' : 'X';
+              render(); // tampilkan langkah pemain dulu
+
+              // Giliran AI — kasih jeda 2-3 detik biar nggak terasa instan.
+              if (isAi && turn === 'O') {
+                aiThinking = true;
+                const statusEl = document.getElementById('status');
+                if (statusEl) statusEl.innerText = 'AI berpikir…';
+
+                const myGen = gen;
+                const delay = 2000 + Math.random() * 1000; // 2-3 detik
+                setTimeout(function() {
+                  // Batal kalau board sudah di-reset / ganti mode selama jeda.
+                  if (myGen !== gen) return;
+
+                  const aiMove = getBestMove(board);
                   if (aiMove !== -1) {
                     board[aiMove] = 'O';
-                    winLine = checkWinner(board);
-                    if (winLine) {
-                      winner = 'O';
-                    } else if (!board.includes('')) {
-                      winner = 'SERI';
-                    }
+                    const wl = checkWinner(board);
+                    if (wl) winner = 'O';
+                    else if (!board.includes('')) winner = 'SERI';
                     turn = 'X';
                   }
-                }
+                  aiThinking = false;
+                  render();
+                }, delay);
               }
-              
-              render();
             });
             
             document.getElementById('btn-ai').addEventListener('pointerdown', function(e) { e.preventDefault(); setMode('ai'); });
