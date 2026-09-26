@@ -9,8 +9,8 @@ export async function renderBoardHtml(game) {
     if (!mark) content = `<span class="number">${index + 1}</span>`
     
     let isWin = game.winLine && game.winLine.includes(index)
-    // Tambahkan event onclick ke HTML
-    return `<div class="cell ${isWin ? 'win' : ''} ${mark === 'X' ? 'x' : mark === 'O' ? 'o' : ''}" onclick="makeMove(${index})">${content}</div>`
+    // HAPUS onclick inline karena diblokir CSP WhatsApp
+    return `<div class="cell ${isWin ? 'win' : ''} ${mark === 'X' ? 'x' : mark === 'O' ? 'o' : ''}" data-index="${index}">${content}</div>`
   }
 
   const html = `
@@ -29,10 +29,18 @@ export async function renderBoardHtml(game) {
           body {
             min-height: 100vh;
             display: flex;
+            flex-direction: column;
             justify-content: center;
             align-items: center;
             padding: 15px;
             box-sizing: border-box;
+          }
+          .status {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 20px;
+            text-align: center;
+            text-shadow: 0 2px 5px rgba(0,0,0,0.5);
           }
           .board-container {
             width: min(100%, 400px);
@@ -81,6 +89,7 @@ export async function renderBoardHtml(game) {
         </style>
       </head>
       <body>
+        <div class="status" id="status">Giliran: X</div>
         <div class="board-container">
           <div class="grid" id="board">
             ${game.board.map((mark, i) => getCell(mark, i)).join('')}
@@ -124,12 +133,21 @@ export async function renderBoardHtml(game) {
               if (winLine && winLine.includes(i)) cellClass += ' win';
               
               let content = mark ? mark : '<span class="number">' + (i + 1) + '</span>';
-              html += '<div class="cell ' + cellClass + '" onclick="makeMove(' + i + ')">' + content + '</div>';
+              html += '<div class="cell ' + cellClass + '" data-index="' + i + '">' + content + '</div>';
             });
             boardEl.innerHTML = html;
+            attachListeners(); // Pasang ulang event listener setelah render
           }
 
-          window.makeMove = function(pos) {
+          function attachListeners() {
+            document.querySelectorAll('.cell').forEach(cell => {
+              cell.addEventListener('click', function() {
+                makeMove(parseInt(this.getAttribute('data-index')));
+              });
+            });
+          }
+
+          function makeMove(pos) {
             if (winner || board[pos] !== '') return;
             
             // Player move
@@ -161,12 +179,20 @@ export async function renderBoardHtml(game) {
             
             render();
             
+            const statusEl = document.getElementById('status');
             if (winner) {
-              setTimeout(() => {
-                alert(winner === 'SERI' ? 'Gamenya SERI!' : 'Pemenangnya adalah: ' + winner + ' 🎉');
-              }, 300);
+              if (winner === 'SERI') {
+                statusEl.innerText = 'Gamenya SERI! 🤝';
+              } else {
+                statusEl.innerText = 'Pemenangnya adalah: ' + winner + ' 🎉';
+              }
+            } else {
+              statusEl.innerText = 'Giliran: ' + turn;
             }
           }
+          
+          // Inisialisasi event listener saat pertama kali dimuat
+          attachListeners();
         </script>
       </body>
     </html>
