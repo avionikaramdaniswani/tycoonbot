@@ -4,7 +4,9 @@ import {
   makeMove,
   availableMoves,
   isPlayer,
-  markOf
+  markOf,
+  AI_JID,
+  getBotMove
 } from '../../game/tictactoe/engine.js'
 import {
   getGame,
@@ -46,6 +48,7 @@ function boardText(board, winLine) {
 }
 
 function mention(jid) {
+  if (jid === AI_JID) return '🤖 AI'
   return `@${jid.split('@')[0]}`
 }
 
@@ -219,6 +222,11 @@ async function handleMove(sock, msg, position) {
   }
 
   await sendBoard(sock, msg.from, game, statusText, msg)
+
+  // Kalau lawan adalah AI dan game masih berjalan, AI langsung main.
+  if (!game.winner && game.players[game.turn] === AI_JID) {
+    await handleAITurn(sock, msg.from, game, msg)
+  }
 }
 
 async function handleQuit(sock, msg) {
@@ -255,11 +263,58 @@ async function handleQuit(sock, msg) {
   )
 }
 
+async function handleAI(sock, msg) {
+  if (!msg.isGroup) {
+    await sendRich(sock, msg.from, '🎮 TIC TAC TOE', '⚠️ Game Tic Tac Toe hanya bisa dimainkan di grup!', msg)
+    return
+  }
+
+  const existing = getGame(msg.from)
+  if (existing) {
+    await sendRich(sock, msg.from, '🎮 TIC TAC TOE', '⚠️ Sudah ada game berjalan di grup ini!\nKetik `.ttt quit` untuk menyerah.', msg)
+    return
+  }
+
+  // Player = X (mulai duluan), AI = O.
+  const game = createGame(msg.sender, AI_JID, msg.from)
+  setGame(msg.from, game)
+
+  const statusText = `⏳ Giliran: ${mention(msg.sender)} (❌)`
+  await sendBoard(sock, msg.from, game, statusText, msg)
+}
+
+async function handleAITurn(sock, jid, game, msg) {
+  const aiMark = game.turn
+  const pos = getBotMove(game.board, aiMark)
+  makeMove(game, AI_JID, pos)
+  setGame(jid, game)
+
+  let statusText
+  if (game.winner === 'draw') {
+    statusText = '🤝 SERI! Tidak ada pemenang.'
+    deleteGame(jid)
+  } else if (game.winner) {
+    if (game.players[game.winner] === AI_JID) {
+      statusText = `🤖 AI (${MARK_EMOJI[game.winner]}) MENANG! Coba lagi!`
+    } else {
+      const winnerJid = game.players[game.winner]
+      statusText = `🏆 ${mention(winnerJid)} (${MARK_EMOJI[game.winner]}) MENANG!`
+    }
+    deleteGame(jid)
+  } else {
+    const nextJid = game.players[game.turn]
+    statusText = `⏳ Giliran: ${mention(nextJid)} (${MARK_EMOJI[game.turn]})`
+  }
+
+  await sendBoard(sock, jid, game, statusText, msg)
+}
+
 async function handleHelp(sock, msg) {
   const text = [
     '📖 CARA MAIN:',
     '',
-    `\`${PREFIX}ttt @pemain\` — tantang seseorang`,
+    `\`${PREFIX}ttt @pemain\` — tantang seseorang (PvP)`,
+    `\`${PREFIX}ttt ai\` — lawan AI 🤖`,
     `\`${PREFIX}ttt accept\` — terima tantangan`,
     `\`${PREFIX}ttt reject\` — tolak tantangan`,
     `\`${PREFIX}ttt <1-9>\` — pilih posisi`,
@@ -275,7 +330,7 @@ async function handleHelp(sock, msg) {
     'Tiga sejajar = menang! (baris/kolom/diagonal)'
   ].join('\n')
 
-  await sendRich(sock, msg.from, '🎮 TIC TAC TOE — Bantuan', text, msg, [`${PREFIX}ttt`])
+  await sendRich(sock, msg.from, '🎮 TIC TAC TOE — Bantuan', text, msg, [`${PREFIX}ttt ai`, `${PREFIX}ttt`])
 }
 
 // ── Command utama ───────────────────────────────────────────
@@ -283,10 +338,15 @@ async function handleHelp(sock, msg) {
 export default {
   name: 'ttt',
   aliases: ['tictactoe'],
-  description: 'Game Tic Tac Toe (PvP di grup)',
+  description: 'Game Tic Tac Toe (PvP & vs AI di grup)',
   category: 'game',
   async execute({ sock, msg, args }) {
     const sub = (args[0] || '').toLowerCase()
+
+    // `.ttt ai` — lawan bot.
+    if (sub === 'ai' || sub === 'bot') {
+      return handleAI(sock, msg)
+    }
 
     // `.ttt accept`
     if (sub === 'accept' || sub === 'terima') {

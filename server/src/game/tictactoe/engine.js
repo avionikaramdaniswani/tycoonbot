@@ -94,3 +94,73 @@ export function markOf(game, playerJid) {
   if (game.players.O === playerJid) return 'O'
   return null
 }
+
+// ── AI (minimax) ────────────────────────────────────────────
+
+/** JID khusus yang merepresentasikan bot AI. */
+export const AI_JID = 'AI_BOT@s.whatsapp.net'
+
+/** Cek siapa yang menang di board. Return 'X', 'O', atau null. */
+function getWinner(board) {
+  for (const [a, b, c] of WIN_LINES) {
+    if (board[a] && board[a] === board[b] && board[b] === board[c]) return board[a]
+  }
+  return null
+}
+
+/** Minimax dengan alpha-beta pruning. */
+function minimax(board, depth, isMaximizing, aiMark, humanMark, alpha, beta) {
+  const winner = getWinner(board)
+  if (winner === aiMark) return 10 - depth
+  if (winner === humanMark) return depth - 10
+  if (board.every((c) => c !== null)) return 0
+
+  if (isMaximizing) {
+    let best = -Infinity
+    for (let i = 0; i < 9; i++) {
+      if (board[i] !== null) continue
+      board[i] = aiMark
+      best = Math.max(best, minimax(board, depth + 1, false, aiMark, humanMark, alpha, beta))
+      board[i] = null
+      alpha = Math.max(alpha, best)
+      if (beta <= alpha) break
+    }
+    return best
+  } else {
+    let best = Infinity
+    for (let i = 0; i < 9; i++) {
+      if (board[i] !== null) continue
+      board[i] = humanMark
+      best = Math.min(best, minimax(board, depth + 1, true, aiMark, humanMark, alpha, beta))
+      board[i] = null
+      beta = Math.min(beta, best)
+      if (beta <= alpha) break
+    }
+    return best
+  }
+}
+
+/**
+ * Pilih langkah terbaik untuk AI. Mengembalikan posisi 1–9.
+ * @param {Array} board — board saat ini
+ * @param {'X'|'O'} aiMark — tanda yang dipakai AI
+ */
+export function getBotMove(board, aiMark) {
+  const humanMark = aiMark === 'X' ? 'O' : 'X'
+  let bestScore = -Infinity
+  let bestMove = -1
+
+  const copy = [...board]
+  for (let i = 0; i < 9; i++) {
+    if (copy[i] !== null) continue
+    copy[i] = aiMark
+    const score = minimax(copy, 0, false, aiMark, humanMark, -Infinity, Infinity)
+    copy[i] = null
+    if (score > bestScore) {
+      bestScore = score
+      bestMove = i
+    }
+  }
+
+  return bestMove + 1 // 1-indexed (user-facing)
+}
