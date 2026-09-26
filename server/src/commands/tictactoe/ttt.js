@@ -1,4 +1,10 @@
-import { AIRich } from '@vanzxy/baileys'
+import { AIRich, Toolkit } from '@vanzxy/baileys'
+
+// Patch: @vanzxy/baileys v2.0.3 — AIRich.build() memanggil Toolkit.stringifyEscaped()
+// tapi method itu belum ada di shared.js. Tambahkan polyfill supaya tidak crash.
+if (typeof Toolkit.stringifyEscaped !== 'function') {
+  Toolkit.stringifyEscaped = (obj) => JSON.stringify(obj)
+}
 import {
   createGame,
   makeMove,
