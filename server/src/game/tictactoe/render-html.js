@@ -1,13 +1,19 @@
 /**
  * Tic Tac Toe mini-app di dalam bubble WA.
- * Splash -> Menu -> (Lobby -> modal tantangan -> Game) atau langsung Game (vs AI).
- * Semua client-side. Gaya bold / neo-brutalist biar nggak keliatan template.
+ * Splash -> Menu -> (Create Room = Online realtime) / (Vs AI).
+ * Online: native WebSocket ke server (/ttt) sebagai wasit. Layar sambung
+ * menampilkan diagnostik nyata (url + state + error) biar ketahuan kalau
+ * koneksi gagal — bukan cuma muter "Menyambungkan" tanpa info.
  *
- * opts.members = [{id,name}] anggota grup buat lobby "Create Room".
+ * opts.wsUrl  = endpoint wss://.../ttt ('' = online nonaktif)
+ * opts.room   = id room yang ditanam di pesan (yang buka pesan sama = 1 room)
+ * opts.members = [{id,name}] anggota grup (buat info lobby)
  */
 export async function renderBoardHtml(game, opts = {}) {
   const members = Array.isArray(opts.members) ? opts.members : []
   const membersJson = JSON.stringify(members)
+  const wsUrl = opts.wsUrl || ''
+  const room = opts.room || ''
 
   const html = `
     <!DOCTYPE html>
@@ -50,6 +56,9 @@ export async function renderBoardHtml(game, opts = {}) {
           .note{background:var(--acc);border:2.5px solid var(--ink);border-radius:11px;box-shadow:4px 4px 0 var(--ink);font-size:12px;font-weight:600;padding:11px 12px;margin-bottom:14px;line-height:1.35;}
           .empty{text-align:center;padding:34px 14px;font-size:13px;font-weight:600;color:#7c7161;line-height:1.5;}
           .status{display:inline-block;font-size:15px;font-weight:800;text-transform:uppercase;letter-spacing:.02em;background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:9px;margin-bottom:16px;}
+          .diag{display:none;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;line-height:1.5;background:var(--card);border:2px dashed var(--ink);border-radius:10px;padding:10px 12px;margin-bottom:14px;word-break:break-all;}
+          .diag.show{display:block;}
+          .diag b{color:var(--x);}
           .board{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
           .cell{aspect-ratio:1/1;background:var(--card);border:2.5px solid var(--ink);border-radius:14px;box-shadow:4px 4px 0 var(--ink);display:flex;justify-content:center;align-items:center;font-size:48px;font-weight:900;line-height:1;cursor:pointer;user-select:none;transition:transform .07s,box-shadow .07s;}
           .cell:active{transform:translate(3px,3px);box-shadow:1px 1px 0 var(--ink);}
@@ -123,6 +132,7 @@ export async function renderBoardHtml(game, opts = {}) {
               <div><div class="htitle" id="g-label">Vs AI</div><div class="hsub" id="g-sub">Papan permainan</div></div>
             </div>
             <div class="status" id="status">Giliran X</div>
+            <div class="diag" id="diag"></div>
             <div class="board" id="board"></div>
             <button class="ctrl" id="btn-new">Main Lagi</button>
           </section>
@@ -142,6 +152,9 @@ export async function renderBoardHtml(game, opts = {}) {
         <script>
           document.addEventListener('DOMContentLoaded', function() {
             const MEMBERS = ${membersJson};
+            const WS_URL = ${JSON.stringify(wsUrl)};
+            const ROOM = ${JSON.stringify(room)};
+            const ONLINE_OK = !!(WS_URL && ROOM);
 
             let board = ['','','','','','','','',''];
             let turn = 'X';
@@ -151,6 +164,10 @@ export async function renderBoardHtml(game, opts = {}) {
             let gen = 0;
             let oppName = '';
             let pending = '';
+            let ws = null;
+            let seat = null;
+            let presence = { X: false, O: false };
+            let lastEvt = 'init';
             function swapTo(id) {
               const list = document.querySelectorAll('.screen');
               for (let i = 0; i < list.length; i++) list[i].classList.remove('active');
@@ -205,7 +222,26 @@ export async function renderBoardHtml(game, opts = {}) {
               }
               return bm;
             }
+            function stateName(w) {
+              if (!w) return 'null';
+              return ['CONNECTING','OPEN','CLOSING','CLOSED'][w.readyState];
+            }
+            function updateDiag() {
+              const d = document.getElementById('diag');
+              if (mode !== 'online') { d.classList.remove('show'); return; }
+              const connected = ws && ws.readyState === 1 && seat;
+              if (connected && (presence.X && presence.O)) { d.classList.remove('show'); return; }
+              d.classList.add('show');
+              let html = '';
+              html += '<b>WS:</b> ' + (WS_URL || '(kosong — tunnel belum aktif)') + '<br>';
+              html += '<b>ROOM:</b> ' + (ROOM || '(kosong)') + '<br>';
+              html += '<b>STATE:</b> ' + stateName(ws) + '<br>';
+              html += '<b>SEAT:</b> ' + (seat || '-') + ' | <b>EVT:</b> ' + lastEvt + '<br>';
+              html += '<b>HADIR:</b> X=' + (presence.X ? 'ya' : '-') + ' O=' + (presence.O ? 'ya' : '-');
+              d.innerHTML = html;
+            }
             function statusText() {
+              if (mode === 'online') return onlineStatus();
               if (winner) {
                 if (winner === 'SERI') return 'Seri!';
                 if (mode === 'ai') return winner === 'O' ? 'AI Menang' : 'Kamu Menang';
@@ -213,6 +249,21 @@ export async function renderBoardHtml(game, opts = {}) {
               }
               if (mode === 'ai') return turn === 'X' ? 'Giliranmu' : 'AI Mikir';
               return turn === 'X' ? 'Giliran Kamu' : 'Giliran ' + oppName;
+            }
+            function onlineStatus() {
+              if (!ONLINE_OK) return 'Server Offline';
+              if (!ws || ws.readyState !== 1) return 'Menyambungkan';
+              if (!seat) return 'Menyambungkan';
+              if (seat === 'spec') {
+                if (winner) return winner === 'SERI' ? 'Seri!' : 'Pemain ' + winner + ' Menang';
+                return 'Nonton - Giliran ' + turn;
+              }
+              if (!presence.X || !presence.O) return 'Menunggu Lawan';
+              if (winner) {
+                if (winner === 'SERI') return 'Seri!';
+                return winner === seat ? 'Kamu Menang' : 'Lawan Menang';
+              }
+              return (turn === seat ? 'Giliranmu' : 'Giliran Lawan') + ' - Kamu ' + seat;
             }
             function render() {
               const el = document.getElementById('board');
@@ -226,6 +277,7 @@ export async function renderBoardHtml(game, opts = {}) {
               });
               el.innerHTML = h;
               document.getElementById('status').innerText = statusText();
+              updateDiag();
             }
             function resetBoard() {
               gen++; aiThinking = false;
@@ -233,7 +285,11 @@ export async function renderBoardHtml(game, opts = {}) {
               turn = 'X'; winner = null;
               render();
             }
-            function openMenu() { gen++; aiThinking = false; goto('menu', 'Memuat', 600); }
+            function openMenu() {
+              gen++; aiThinking = false;
+              if (mode === 'online') closeWs();
+              goto('menu', 'Memuat', 600);
+            }
             function openLobby() { buildList(); goto('lobby', 'Membuka lobby', 720); }
             function startAi() {
               mode = 'ai'; resetBoard();
@@ -241,15 +297,59 @@ export async function renderBoardHtml(game, opts = {}) {
               document.getElementById('g-sub').innerText = 'Kamu (X) vs Bot (O)';
               goto('game', 'Menyiapkan papan', 720);
             }
-            function startLocal(name) {
-              mode = 'local'; oppName = name || 'Lawan'; resetBoard();
-              document.getElementById('g-label').innerText = 'Duel';
-              document.getElementById('g-sub').innerText = 'Kamu (X) vs ' + oppName + ' (O)';
-              goto('game', 'Menyiapkan duel', 760);
+            function startOnline(name) {
+              mode = 'online'; oppName = name || '';
+              gen++; aiThinking = false;
+              board = ['','','','','','','','',''];
+              turn = 'X'; winner = null; seat = null; presence = { X: false, O: false }; lastEvt = 'start';
+              document.getElementById('g-label').innerText = 'Online';
+              document.getElementById('g-sub').innerText = name ? ('vs ' + name) : 'Realtime multiplayer';
+              render();
+              goto('game', name ? ('Menantang ' + name) : 'Menyambungkan', 900);
+              connectWs();
+            }
+            function connectWs() {
+              if (!ONLINE_OK) { lastEvt = 'no-url'; render(); return; }
+              closeWs();
+              const g = gen;
+              try {
+                lastEvt = 'connecting';
+                ws = new WebSocket(WS_URL + '?room=' + encodeURIComponent(ROOM));
+              } catch (err) {
+                lastEvt = 'throw:' + (err && err.message ? err.message : err);
+                render();
+                return;
+              }
+              ws.onopen = function() { lastEvt = 'open'; render(); };
+              ws.onmessage = function(ev) {
+                if (mode !== 'online' || g !== gen) return;
+                lastEvt = 'msg';
+                let msg;
+                try { msg = JSON.parse(ev.data); } catch (e) { return; }
+                if (msg.type === 'welcome') { seat = msg.seat; }
+                else if (msg.type === 'state') {
+                  const s = msg.state;
+                  board = s.board.map(function(c) { return c || ''; });
+                  turn = s.turn; winner = s.winner || null;
+                  if (msg.presence) presence = msg.presence;
+                }
+                render();
+              };
+              ws.onerror = function() { lastEvt = 'error'; if (mode === 'online' && g === gen) render(); };
+              ws.onclose = function(e) { lastEvt = 'close:' + (e && e.code); if (mode === 'online' && g === gen) render(); };
+            }
+            function closeWs() {
+              if (ws) { try { ws.onclose = null; ws.close(); } catch (e) {} ws = null; }
+              seat = null; presence = { X: false, O: false };
+            }
+            function wsSend(obj) {
+              if (ws && ws.readyState === 1) { try { ws.send(JSON.stringify(obj)); } catch (e) {} }
             }
             function buildList() {
               const note = document.getElementById('l-note');
-              note.innerHTML = '<div class="note">Mode duel = gantian pegang HP (pass and play). Realtime beda HP belum didukung WhatsApp.</div>';
+              note.innerHTML = ONLINE_OK
+                ? '<div class="note">Pilih lawan lalu Terima. Lawan cukup buka papan/pesan yang sama buat gabung realtime.</div>'
+                : '<div class="note">Server realtime belum aktif (WS kosong). Set tunnel dulu, cek diagnostik di layar game.</div>';
               const list = document.getElementById('p-list');
               if (!MEMBERS.length) {
                 list.innerHTML = '<div class="empty">Belum ada anggota grup yang bisa ditantang.<br>Buka papan ini di dalam grup.</div>';
@@ -271,9 +371,17 @@ export async function renderBoardHtml(game, opts = {}) {
               const cell = e.target.closest('.cell');
               if (!cell) return;
               e.preventDefault();
-              if (aiThinking || winner) return;
+              if (aiThinking) return;
               const pos = parseInt(cell.getAttribute('data-i'), 10);
-              if (isNaN(pos) || board[pos] !== '') return;
+              if (isNaN(pos)) return;
+              if (mode === 'online') {
+                if (!ONLINE_OK || !seat || seat === 'spec') return;
+                if (winner || turn !== seat || board[pos] !== '') return;
+                if (!presence.X || !presence.O) return;
+                wsSend({ type: 'move', pos: pos });
+                return;
+              }
+              if (winner || board[pos] !== '') return;
               board[pos] = turn;
               if (checkWinner(board)) { winner = turn; render(); return; }
               if (!board.includes('')) { winner = 'SERI'; render(); return; }
@@ -298,10 +406,14 @@ export async function renderBoardHtml(game, opts = {}) {
             document.getElementById('m-ai').addEventListener('pointerdown', function(e){ e.preventDefault(); startAi(); });
             document.getElementById('l-back').addEventListener('pointerdown', function(e){ e.preventDefault(); openMenu(); });
             document.getElementById('g-back').addEventListener('pointerdown', function(e){ e.preventDefault(); openMenu(); });
-            document.getElementById('btn-new').addEventListener('pointerdown', function(e){ e.preventDefault(); resetBoard(); });
+            document.getElementById('btn-new').addEventListener('pointerdown', function(e){
+              e.preventDefault();
+              if (mode === 'online') { if (seat && seat !== 'spec') wsSend({ type: 'reset' }); }
+              else resetBoard();
+            });
             document.getElementById('board').addEventListener('pointerdown', boardTap);
             document.getElementById('modal-no').addEventListener('pointerdown', function(e){ e.preventDefault(); hideModal(); });
-            document.getElementById('modal-yes').addEventListener('pointerdown', function(e){ e.preventDefault(); var n = pending; hideModal(); startLocal(n); });
+            document.getElementById('modal-yes').addEventListener('pointerdown', function(e){ e.preventDefault(); var n = pending; hideModal(); startOnline(n); });
 
             render();
             setTimeout(function(){ swapTo('menu'); }, 2100);
