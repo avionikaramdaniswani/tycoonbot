@@ -18,44 +18,53 @@ export async function renderBoardHtml(game) {
       <head>
         <style>
           body {
-            width: 500px;
-            height: 500px;
+            width: 100vw;
+            height: 100vh;
             margin: 0;
             display: flex;
             justify-content: center;
             align-items: center;
             background: linear-gradient(135deg, #1a1c29 0%, #2a2d42 100%);
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+            box-sizing: border-box;
           }
           .board-container {
+            width: 90vmin;
+            height: 90vmin;
             background: rgba(255, 255, 255, 0.05);
-            padding: 30px;
+            padding: 4vmin;
             border-radius: 20px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.5), inset 0 2px 5px rgba(255,255,255,0.1);
             border: 1px solid rgba(255,255,255,0.1);
+            box-sizing: border-box;
           }
           .grid {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
-            gap: 15px;
+            grid-template-rows: repeat(3, 1fr);
+            gap: 2vmin;
+            width: 100%;
+            height: 100%;
           }
           .cell {
-            width: 100px;
-            height: 100px;
             background: #1f2233;
             border-radius: 15px;
             display: flex;
             justify-content: center;
             align-items: center;
-            font-size: 60px;
+            font-size: 15vmin;
             font-weight: bold;
             box-shadow: inset 0 4px 5px rgba(0,0,0,0.4), 0 2px 0 rgba(255,255,255,0.05);
             text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+            cursor: pointer;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
           }
           .cell.x { color: #f7768e; }
           .cell.o { color: #7aa2f7; }
           .number {
-            font-size: 30px;
+            font-size: 8vmin;
             color: rgba(255,255,255,0.1);
             text-shadow: none;
           }
