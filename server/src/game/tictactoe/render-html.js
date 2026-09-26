@@ -98,6 +98,32 @@ export async function renderBoardHtml(game) {
             box-shadow: 0 0 20px rgba(224, 175, 104, 0.5);
           }
           .cell:active { transform: scale(0.95); }
+          .controls {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+            width: min(100%, 400px);
+          }
+          .ctrl {
+            flex: 1;
+            padding: 12px 8px;
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.12);
+            background: rgba(255,255,255,0.05);
+            color: #fff;
+            font-size: 14px;
+            font-weight: 600;
+            font-family: inherit;
+            cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
+            transition: transform .1s ease, background .15s ease;
+          }
+          .ctrl.active {
+            background: linear-gradient(135deg, #7aa2f7, #bb9af7);
+            border-color: transparent;
+            color: #1a1c29;
+          }
+          .ctrl:active { transform: scale(0.96); }
         </style>
       </head>
       <body>
@@ -108,11 +134,18 @@ export async function renderBoardHtml(game) {
           </div>
         </div>
 
+        <div class="controls">
+          <button class="ctrl" data-mode="ai" id="btn-ai">🤖 vs AI</button>
+          <button class="ctrl" data-mode="pvp" id="btn-pvp">👥 2 Player</button>
+          <button class="ctrl" id="btn-new">♻️ New</button>
+        </div>
+
         <script>
           document.addEventListener('DOMContentLoaded', function() {
             let board = ${JSON.stringify(boardForClient)};
             let turn = '${game.turn}';
             let isAi = ${isAi};
+            let mode = isAi ? 'ai' : 'pvp';
             let winner = null;
 
             function checkWinner(b) {
@@ -190,13 +223,35 @@ export async function renderBoardHtml(game) {
               const statusEl = document.getElementById('status');
               if (winner) {
                 if (winner === 'SERI') {
-                  statusEl.innerText = 'Gamenya SERI! 🤝';
+                  statusEl.innerText = 'SERI! 🤝';
                 } else {
-                  statusEl.innerText = 'Pemenangnya: ' + winner + ' 🎉';
+                  let who = winner;
+                  if (mode === 'ai') who = (winner === 'O') ? 'AI 🤖' : 'Kamu';
+                  statusEl.innerText = 'Pemenang: ' + who + ' 🎉';
                 }
               } else {
-                statusEl.innerText = 'Giliran: ' + turn;
+                const modeLabel = mode === 'ai' ? 'vs AI 🤖' : '2 Player 👥';
+                statusEl.innerText = modeLabel + ' • Giliran: ' + turn;
               }
+            }
+
+            function resetBoard() {
+              board = ['', '', '', '', '', '', '', '', ''];
+              turn = 'X';
+              winner = null;
+              render();
+            }
+
+            function updateControls() {
+              document.getElementById('btn-ai').classList.toggle('active', mode === 'ai');
+              document.getElementById('btn-pvp').classList.toggle('active', mode === 'pvp');
+            }
+
+            function setMode(m) {
+              mode = m;
+              isAi = (m === 'ai');
+              updateControls();
+              resetBoard();
             }
 
             // Event delegation + pointerdown (seperti Anya Chess) supaya responsif di WA webview.
@@ -238,7 +293,12 @@ export async function renderBoardHtml(game) {
               render();
             });
             
-            // Render pertama kali (optional, untuk sync)
+            document.getElementById('btn-ai').addEventListener('pointerdown', function(e) { e.preventDefault(); setMode('ai'); });
+            document.getElementById('btn-pvp').addEventListener('pointerdown', function(e) { e.preventDefault(); setMode('pvp'); });
+            document.getElementById('btn-new').addEventListener('pointerdown', function(e) { e.preventDefault(); resetBoard(); });
+
+            // Render pertama kali
+            updateControls();
             render();
           });
         </script>
