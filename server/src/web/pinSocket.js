@@ -115,15 +115,20 @@ async function handleSearch(ws, msg) {
   }
 }
 
-export function initPinSocket(httpServer) {
-  const wss = new WebSocketServer({ server: httpServer, path: '/pin' })
+export function initPinSocket() {
+  // noServer: routing upgrade dipusatkan di index.js (hindari bentrok dengan
+  // socket.io & WSS /ttt yang bikin handshake /pin ditolak 400).
+  const wss = new WebSocketServer({ noServer: true })
 
   wss.on('connection', (ws) => {
+    logger.info('Pinterest /pin: client terhubung.')
     ws.on('message', (raw) => {
       let msg
       try { msg = JSON.parse(raw.toString()) } catch { return }
       if (msg.type === 'search') handleSearch(ws, msg)
     })
+    ws.on('close', (code) => logger.info(`Pinterest /pin: client putus (code ${code}).`))
+    ws.on('error', (e) => logger.warn(`Pinterest /pin: error socket — ${e.message}`))
   })
 
   logger.success('WebSocket Pinterest (/pin) siap.')

@@ -7,7 +7,11 @@ import { logBus, logHistory } from '../lib/logger.js'
 /** Pasang Socket.IO di atas HTTP server & forward event bot -> dashboard. */
 export function initSocket(httpServer) {
   const io = new Server(httpServer, {
-    cors: { origin: config.corsOrigin, credentials: true }
+    cors: { origin: config.corsOrigin, credentials: true },
+    // Jangan hancurkan upgrade WebSocket milik path lain (/ttt, /pin). Router
+    // upgrade terpusat di index.js yang menanganinya. Tanpa ini, engine.io
+    // punya timer yang bisa memutus koneksi WS non-socket.io.
+    destroyUpgrade: false
   })
 
   // Autentikasi socket pakai token JWT yang sama dengan REST.

@@ -52,6 +52,9 @@ export async function renderPinterestHtml(opts = {}) {
           .qpill .qt{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
           .status{padding:14px 16px;font-size:13px;color:var(--gray);text-align:center;line-height:1.5;}
           .status.err{color:var(--red);font-weight:600;}
+          .diag{display:none;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:10.5px;line-height:1.5;background:#fbfbfb;border:1px dashed var(--line);border-radius:10px;padding:9px 11px;margin:0 12px 8px;word-break:break-all;color:#555;}
+          .diag.show{display:block;}
+          .diag b{color:var(--red);}
           .grid{column-count:2;column-gap:8px;padding:8px;}
           .card{break-inside:avoid;margin-bottom:8px;border-radius:16px;overflow:hidden;background:var(--soft);cursor:pointer;}
           .card img{width:100%;height:auto;display:block;}
@@ -101,6 +104,7 @@ export async function renderPinterestHtml(opts = {}) {
               <div class="qpill" id="r-qpill"><span class="mag">&#128269;</span><span class="qt" id="r-qt"></span></div>
             </div>
             <div class="status" id="r-status"></div>
+            <div class="diag" id="diag"></div>
             <div class="grid" id="grid"></div>
           </section>
           <div class="viewer" id="viewer">
@@ -113,8 +117,17 @@ export async function renderPinterestHtml(opts = {}) {
           document.addEventListener('DOMContentLoaded', function(){
             var WS_URL = ${JSON.stringify(wsUrl)};
             var ONLINE = !!WS_URL;
-            var ws = null, query = '', reqId = 0, pending = null;
+            var ws = null, query = '', reqId = 0, pending = null, lastEvt = 'init';
             function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+            function stateName(w){ return w ? ['CONNECTING','OPEN','CLOSING','CLOSED'][w.readyState] : 'null'; }
+            function updateDiag(){
+              var d=document.getElementById('diag');
+              if(!ONLINE){ d.classList.add('show'); d.innerHTML='<b>WS:</b> nonaktif (PUBLIC_URL/tunnel kosong)'; return; }
+              var ok = ws && ws.readyState===1 && !pending;
+              if(ok){ d.classList.remove('show'); return; }
+              d.classList.add('show');
+              d.innerHTML='<b>WS:</b> '+esc(WS_URL)+'<br><b>STATE:</b> '+stateName(ws)+' | <b>EVT:</b> '+esc(lastEvt);
+            }
             function buildKeys(){
               var rows=document.querySelectorAll('[data-row]');
               for(var r=0;r<rows.length;r++){
@@ -142,14 +155,18 @@ export async function renderPinterestHtml(opts = {}) {
             }
             function connectWs(){
               if(!ONLINE) return;
-              try{ ws=new WebSocket(WS_URL); }catch(e){ ws=null; return; }
-              ws.onopen=function(){ flush(); };
+              lastEvt='connecting';
+              try{ ws=new WebSocket(WS_URL); }catch(e){ ws=null; lastEvt='throw:'+(e&&e.message||e); updateDiag(); return; }
+              ws.onopen=function(){ lastEvt='open'; flush(); updateDiag(); };
               ws.onmessage=function(ev){
                 var m; try{ m=JSON.parse(ev.data); }catch(e){ return; }
+                lastEvt='msg:'+m.type;
                 if(m.type==='results'){ if(m.reqId!==reqId) return; pending=null; renderResults(m.items||[], m.query); }
                 else if(m.type==='error'){ if(m.reqId!==reqId && m.reqId!==0) return; pending=null; showError(m.message||'Gagal'); }
+                updateDiag();
               };
-              ws.onclose=function(){ ws=null; if(pending) showError('Koneksi terputus. Balik lalu cari lagi ya.'); };
+              ws.onerror=function(){ lastEvt='error'; updateDiag(); };
+              ws.onclose=function(e){ ws=null; lastEvt='close:'+(e&&e.code); if(pending) showError('Koneksi terputus. Balik lalu cari lagi ya.'); updateDiag(); };
             }
             function ensureWs(){ if(!ws || ws.readyState>1) connectWs(); }
             function flush(){ if(pending && ws && ws.readyState===1){ try{ ws.send(JSON.stringify({type:'search',query:pending.query,reqId:pending.reqId})); }catch(e){} } }
@@ -173,7 +190,7 @@ export async function renderPinterestHtml(opts = {}) {
               swapTo('results');
               if(!ONLINE){ showError('Server offline — PUBLIC_URL / tunnel belum aktif.'); return; }
               reqId++; pending={query:q,reqId:reqId};
-              showSkeleton(); ensureWs(); flush();
+              showSkeleton(); ensureWs(); flush(); updateDiag();
             }
             function renderResults(items,q){
               var grid=document.getElementById('grid');

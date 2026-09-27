@@ -132,8 +132,11 @@ function handleReset(ws) {
   broadcastState(room)
 }
 
-export function initGameSocket(httpServer) {
-  const wss = new WebSocketServer({ server: httpServer, path: '/ttt' })
+export function initGameSocket() {
+  // noServer: WSS TIDAK pasang listener 'upgrade' sendiri. Routing per-path
+  // ditangani satu router terpusat di index.js supaya nggak rebutan/nolak
+  // upgrade milik path lain (socket.io & /pin) — lihat catatan di index.js.
+  const wss = new WebSocketServer({ noServer: true })
 
   wss.on('connection', (ws) => {
     // Koneksi mulai "kosong" — belum di room mana pun. Room ditentukan

@@ -34,8 +34,22 @@ async function main() {
   const app = createApp()
   const server = http.createServer(app)
   initSocket(server)
-  initGameSocket(server)
-  initPinSocket(server)
+  const gameWss = initGameSocket()
+  const pinWss = initPinSocket()
+
+  // Router 'upgrade' terpusat. WAJIB satu pintu: kalau tiap WebSocketServer
+  // pasang listener 'upgrade' sendiri (opsi {server}), server yang path-nya
+  // nggak cocok malah membalas 400 ke handshake path lain — itu yang bikin
+  // /pin ketolak walau /ttt jalan. Di sini kita cocokin path secara eksplisit;
+  // path lain (mis. /socket.io/) dibiarkan buat listener bawaan socket.io.
+  server.on('upgrade', (req, socket, head) => {
+    const path = (req.url || '').split('?')[0]
+    if (path === '/ttt') {
+      gameWss.handleUpgrade(req, socket, head, (ws) => gameWss.emit('connection', ws, req))
+    } else if (path === '/pin') {
+      pinWss.handleUpgrade(req, socket, head, (ws) => pinWss.emit('connection', ws, req))
+    }
+  })
 
   server.listen(config.port, () => {
     logger.success(`Server & API jalan di http://localhost:${config.port}`)
