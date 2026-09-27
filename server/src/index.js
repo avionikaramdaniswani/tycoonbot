@@ -3,6 +3,7 @@ import config from './config/index.js'
 import { createApp } from './web/app.js'
 import { initSocket } from './web/socket.js'
 import { initGameSocket } from './web/gameSocket.js'
+import { initPinSocket } from './web/pinSocket.js'
 import { startTunnel } from './lib/tunnel.js'
 import { bot } from './bot/BotManager.js'
 import { logger } from './lib/logger.js'
@@ -34,6 +35,7 @@ async function main() {
   const server = http.createServer(app)
   initSocket(server)
   initGameSocket(server)
+  initPinSocket(server)
 
   server.listen(config.port, () => {
     logger.success(`Server & API jalan di http://localhost:${config.port}`)

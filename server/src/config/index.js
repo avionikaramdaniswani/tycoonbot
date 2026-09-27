@@ -36,6 +36,14 @@ export const config = {
     owner: process.env.OWNER_NUMBER || ''
   },
 
+  // API pihak ketiga buat fitur Pinterest (BetaBotz). Kunci di-whitelist per
+  // IP server, jadi IP mesin yang menjalankan server ini harus didaftarkan di
+  // https://api.betabotz.eu.org/profile — kalau tidak, API menolak request.
+  pinterest: {
+    apiBase: process.env.PINTEREST_API_BASE || 'https://api.betabotz.eu.org',
+    apiKey: process.env.PINTEREST_API_KEY || 'Btz-TIWmc'
+  },
+
   mongodb: {
     uri: process.env.MONGODB_URI || '',
     db: process.env.MONGODB_DB || 'piobot'
