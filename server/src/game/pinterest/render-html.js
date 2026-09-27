@@ -117,12 +117,17 @@ export async function renderPinterestHtml(opts = {}) {
           document.addEventListener('DOMContentLoaded', function(){
             var WS_URL = ${JSON.stringify(wsUrl)};
             var ONLINE = !!WS_URL;
-            var ws = null, query = '', reqId = 0, pending = null, lastEvt = 'init';
+            var ws = null, query = '', reqId = 0, pending = null, lastEvt = 'init', settled = false;
             function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
             function stateName(w){ return w ? ['CONNECTING','OPEN','CLOSING','CLOSED'][w.readyState] : 'null'; }
             function updateDiag(){
               var d=document.getElementById('diag');
               if(!ONLINE){ d.classList.add('show'); d.innerHTML='<b>WS:</b> nonaktif (PUBLIC_URL/tunnel kosong)'; return; }
+              // Hasil sudah tampil & tidak ada pencarian tertunda -> sembunyikan diag.
+              // Webview WA rutin menutup WS (code 1005) SETELAH hasil terkirim; itu
+              // normal & tidak memengaruhi gambar yang sudah dirender, jadi jangan
+              // munculkan panel error gara-gara close yang tak berbahaya itu.
+              if(settled && !pending){ d.classList.remove('show'); return; }
               var ok = ws && ws.readyState===1 && !pending;
               if(ok){ d.classList.remove('show'); return; }
               d.classList.add('show');
@@ -189,10 +194,11 @@ export async function renderPinterestHtml(opts = {}) {
               document.getElementById('r-qt').innerText=q;
               swapTo('results');
               if(!ONLINE){ showError('Server offline — PUBLIC_URL / tunnel belum aktif.'); return; }
-              reqId++; pending={query:q,reqId:reqId};
+              reqId++; pending={query:q,reqId:reqId}; settled=false;
               showSkeleton(); ensureWs(); flush(); updateDiag();
             }
             function renderResults(items,q){
+              settled=true;
               var grid=document.getElementById('grid');
               if(!items.length){ grid.innerHTML=''; setStatus('Nggak nemu hasil buat "'+(q||query)+'". Coba kata kunci lain.',false); return; }
               setStatus('');
