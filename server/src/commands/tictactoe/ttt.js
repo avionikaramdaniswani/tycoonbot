@@ -5,13 +5,18 @@ import config from '../../config/index.js'
 
 const PREFIX = config.bot.prefix
 
-// Ubah PUBLIC_URL (http/https) jadi endpoint WebSocket (ws/wss) + path /ttt.
+// Ubah PUBLIC_URL (http/https) jadi endpoint WebSocket + path /ttt.
 // Kalau PUBLIC_URL kosong, kembalikan '' -> mode Online otomatis nonaktif.
+//
+// PENTING: paksa wss:// untuk host non-lokal. trycloudflare (dan host publik
+// apa pun) SELALU TLS, dan webview WA (https) MEMBLOKIR ws:// (mixed-content).
+// Jadi walau PUBLIC_URL kebetulan ke-set http://, tetap naikkan ke wss://.
 function deriveWsUrl() {
   const base = config.publicUrl
   if (!base) return ''
-  const wsBase = base.replace(/^http/i, (m) => (m.toLowerCase() === 'https' ? 'wss' : 'ws'))
-  return wsBase.replace(/\/+$/, '') + '/ttt'
+  const host = base.replace(/^https?:\/\//i, '').replace(/\/+$/, '')
+  const isLocal = /^(localhost|127\.0\.0\.1|\[?::1\]?)(:|$|\/)/i.test(host)
+  return (isLocal ? 'ws://' : 'wss://') + host + '/ttt'
 }
 
 // ── Kirim papan interaktif (HTML Primitive / AIRich) ────────────────
