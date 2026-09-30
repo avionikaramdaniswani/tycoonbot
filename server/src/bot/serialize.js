@@ -12,6 +12,7 @@ export function serializeMessage(sock, m) {
   const isGroup = Boolean(from?.endsWith('@g.us'))
   const sender = isGroup ? m.key.participant || m.participant || from : from
   const content = m.message[type]
+  const mentionedJid = content?.contextInfo?.mentionedJid || []
 
   let text = ''
   if (type === 'conversation') text = m.message.conversation || ''
@@ -50,7 +51,8 @@ export function serializeMessage(sock, m) {
     fromMe: Boolean(m.key.fromMe),
     type,
     text,
-    pushName: m.pushName || ''
+    pushName: m.pushName || '',
+    mentionedJid
   }
 }
 
