@@ -5,12 +5,24 @@ async function sendProfile(sock, msg) {
   let jid = msg.mentionedJid?.[0] || msg.quotedJid
   
   if (!jid && msg.text && msg.text.includes('@')) {
-    const matched = msg.text.match(/@(\d+)/)
-    if (matched) {
-      jid = `${matched[1]}@s.whatsapp.net`
+    const matchNumber = msg.text.match(/@(\d+)/)
+    if (matchNumber) {
+      jid = `${matchNumber[1]}@s.whatsapp.net`
+    } else {
+      const matchUsername = msg.text.match(/@([a-zA-Z0-9_.-]+)/)
+      if (matchUsername) {
+        try {
+          const resolved = await sock.findUserByUsername(matchUsername[1])
+          if (resolved && resolved.jid) {
+            jid = resolved.jid
+          }
+        } catch (e) {
+          // Gagal resolve username, abaikan
+        }
+      }
     }
   }
-  
+
   jid = jid || msg.sender || msg.from
 
   // Hilangkan device id (misal :24) untuk perbandingan
