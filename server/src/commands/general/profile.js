@@ -13,22 +13,28 @@ async function sendProfile(sock, msg) {
   
   jid = jid || msg.sender || msg.from
 
-  const isSelf = jid === (msg.sender || msg.from)
+  // Hilangkan device id (misal :24) untuk perbandingan
+  const targetNumber = jid.split('@')[0].split(':')[0]
+  const senderNumber = (msg.sender || msg.from).split('@')[0].split(':')[0]
+  
+  const isSelf = targetNumber === senderNumber
   let photo = ''
   let name = isSelf ? msg.pushName : ''
   
+  // Pastikan jid dalam format yang benar untuk Baileys fetch
+  const cleanJid = `${targetNumber}@s.whatsapp.net`
+
   try {
-    photo = await sock.profilePictureUrl(jid, 'image') || ''
+    photo = await sock.profilePictureUrl(cleanJid, 'image') || ''
   } catch {
     photo = ''
   }
   
   if (!name) {
-    name = getCachedName(jid) || ''
+    name = getCachedName(cleanJid) || ''
   }
   
-  const number = jid.split('@')[0].split(':')[0]
-  const rawHtml = renderProfileHtml({ name: name || 'Pengguna WhatsApp', number, photo })
+  const rawHtml = renderProfileHtml({ name: name || `+${targetNumber}`, number: targetNumber, photo })
   const data = Buffer.from(JSON.stringify({
     response_id: `profile-${Date.now()}`,
     sections: [{ view_model: { primitive: { __typename: 'GenAIaeacdsnwHtmlPrimitive', payload: rawHtml, trusted_sources: [] }, __typename: 'GenAISingleLayoutViewModel' } }]
