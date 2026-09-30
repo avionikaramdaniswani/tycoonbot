@@ -1,22 +1,32 @@
 import { renderProfileHtml } from '../../game/profile/render-html.js'
+import { getName as getCachedName } from '../../bot/nameCache.js'
 
 async function sendProfile(sock, msg) {
-  const jid = msg.mentionedJid?.[0] || msg.sender || msg.from
+  let jid = msg.mentionedJid?.[0] || msg.quotedJid
+  
+  if (!jid && msg.text && msg.text.includes('@')) {
+    const matched = msg.text.match(/@(\d+)/)
+    if (matched) {
+      jid = `${matched[1]}@s.whatsapp.net`
+    }
+  }
+  
+  jid = jid || msg.sender || msg.from
+
   const isSelf = jid === (msg.sender || msg.from)
   let photo = ''
   let name = isSelf ? msg.pushName : ''
+  
   try {
     photo = await sock.profilePictureUrl(jid, 'image') || ''
   } catch {
     photo = ''
   }
+  
   if (!name) {
-    try {
-      name = await sock.getName(jid)
-    } catch {
-      name = ''
-    }
+    name = getCachedName(jid) || ''
   }
+  
   const number = jid.split('@')[0].split(':')[0]
   const rawHtml = renderProfileHtml({ name: name || 'Pengguna WhatsApp', number, photo })
   const data = Buffer.from(JSON.stringify({

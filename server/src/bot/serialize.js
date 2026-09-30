@@ -40,6 +40,8 @@ export function serializeMessage(sock, m) {
     }
   }
 
+  const quotedJid = content?.contextInfo?.participant || null
+
   return {
     raw: m,
     key: m.key,
@@ -52,7 +54,8 @@ export function serializeMessage(sock, m) {
     type,
     text,
     pushName: m.pushName || '',
-    mentionedJid
+    mentionedJid,
+    quotedJid
   }
 }
 
